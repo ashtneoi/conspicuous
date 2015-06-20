@@ -4,10 +4,18 @@
 #include "fail.h"
 #include "utils.h"
 
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
+
+#define E_COMMON 1
+#define E_ARG 2
+#define E_INFO 3
+#define E_RARE 4
 
 
 const char* progname;
@@ -37,6 +45,9 @@ const char* const msg_processor_not_supported =
     "Processor \"%s\" is not supported at the moment. Pass the -l option to\n"
     "see the list of supported processors.\n";
 
+const char* const msg_processor_required =
+    "The -p option is required.\n";
+
 
 //
 // processors
@@ -45,7 +56,7 @@ const char* const msg_processor_not_supported =
 
 enum processor {
     P16F1454,
-    NONE,
+    P_NONE,
 };
 
 const char* const processors[] = {
@@ -60,7 +71,7 @@ const char* const processors[] = {
 void exit_with_usage()
 {
     fprintf(stderr, msg_usage, progname);
-    exit(3);
+    exit(E_INFO);
 }
 
 
@@ -69,16 +80,17 @@ void exit_with_processors()
     fprintf(stderr, "Processors currently supported:\n");
     for (unsigned int i = 0; i < lengthof(processors); ++i)
         fprintf(stderr, "  %s\n", processors[i]);
-    exit(3);
+    exit(E_INFO);
 }
 
 
 struct args {
     enum processor processor;
+    int source_idx;
 } process_args(int argc, char** argv)
 {
     struct args args = {
-        .processor = -1,
+        .processor = P_NONE,
     };
 
     while (true) {
@@ -96,11 +108,16 @@ struct args {
                     break;
             if (i == lengthof(processors)) {
                 fprintf(stderr, msg_processor_not_supported, optarg);
-                exit(2);
+                exit(E_ARG);
             }
 
             args.processor = i;
         };
+    }
+
+    if (args.processor == P_NONE) {
+        fputs(msg_processor_required, stderr);
+        exit(E_ARG);
     }
 
     return args;
@@ -112,15 +129,42 @@ struct args {
 //
 
 
+bool assemble_16F1454(int src)
+{
+    (void)src;
+    return false;
+}
+
+
 int main(int argc, char** argv)
 {
+    // Do some setup.
+
     progname = argv[0];
 
     if (argc < 2)
         exit_with_usage();
 
     struct args args = process_args(argc, argv);
-    (void)args;
 
+    // Get ready to read the source file.
+
+    int src = open(argv[args.source_idx], O_RDONLY);
+    if (src < 0)
+        fatal_e(1, "Can't open file \"%s\"", argv[args.source_idx]);
+
+    // Assemble the source file.
+
+    switch (args.processor) {
+    case P16F1454:
+        if (!assemble_16F1454(src))
+            return E_COMMON;
+        break;
+    case P_NONE:
+        fatal(E_RARE, "This should never happen!");
+        break;
+    }
+
+    close(src); // (Ignore errors.)
     return 0;
 }
