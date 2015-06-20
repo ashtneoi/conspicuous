@@ -1,7 +1,10 @@
 #define _POSIX_C_SOURCE 2
 
+#include "cpic.h"
+
 #include "bufman.h"
 #include "fail.h"
+#include "P16F1454.h"
 #include "utils.h"
 
 #include <fcntl.h>
@@ -19,6 +22,7 @@
 
 
 const char* progname;
+int verbosity = 0;
 
 
 //
@@ -27,10 +31,10 @@ const char* progname;
 
 
 const char* const msg_usage =
-    "Usage:  %s FILE1\n"
+    "Usage:  %s FILE\n"
     "\n"
     "Arguments:\n"
-    "  FILE1    the assembly file to read\n"
+    "  FILE    the assembly file to read\n"
     "\n"
     "Available options:\n"
     "  -l\n"
@@ -39,6 +43,8 @@ const char* const msg_usage =
     "      show this usage text\n"
     "  -p PROCESSOR\n"
     "      assemble for the specified processor\n"
+    "  -v\n"
+    "      increase verbosity (can be passed up to 2 times)\n"
     ;
 
 const char* const msg_processor_not_supported =
@@ -94,7 +100,7 @@ struct args {
     };
 
     while (true) {
-        int c = getopt(argc, argv, "lhp:");
+        int c = getopt(argc, argv, "lhp:v");
         if (c == -1) {
             break;
         } else if (c == 'l') {
@@ -112,13 +118,17 @@ struct args {
             }
 
             args.processor = i;
-        };
+        } else if (c == 'v') {
+            ++verbosity;
+        }
     }
 
     if (args.processor == P_NONE) {
         fputs(msg_processor_required, stderr);
         exit(E_ARG);
     }
+
+    args.source_idx = optind;
 
     return args;
 }
@@ -127,13 +137,6 @@ struct args {
 //
 // everything else
 //
-
-
-bool assemble_16F1454(int src)
-{
-    (void)src;
-    return false;
-}
 
 
 int main(int argc, char** argv)
@@ -149,9 +152,13 @@ int main(int argc, char** argv)
 
     // Get ready to read the source file.
 
+    if (argv[args.source_idx] == NULL)
+        fatal(E_COMMON, "No file specified");
+
+    v2("Opening source file");
     int src = open(argv[args.source_idx], O_RDONLY);
     if (src < 0)
-        fatal_e(1, "Can't open file \"%s\"", argv[args.source_idx]);
+        fatal_e(E_COMMON, "Can't open file \"%s\"", argv[args.source_idx]);
 
     // Assemble the source file.
 
