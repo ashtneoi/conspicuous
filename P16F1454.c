@@ -18,7 +18,11 @@ char src_buf[CHUNK_LEN * 2];
 
 enum token_type {
     T_LABEL,
+    T_PLABEL, // program label
+    T_DLABEL, // data label
     T_OPCODE,
+    T_OCTNUM,
+    T_DECNUM,
     T_HEXNUM,
     T_NONE,
 };
@@ -68,16 +72,16 @@ static
 struct line lex_line(const int src, size_t* pos, size_t* len)
 {
     struct line line;
-    int line_idx = 0;
+    int token_idx = 0;
 
     enum line_state {
-        S_LABEL,
+        S_PLABEL,
         S_COLON,
         S_OPCODE,
-        S_ARG,
+        S_OPERAND,
         S_COMMA,
         S_COMMENT,
-    } state = S_LABEL;
+    } state = S_PLABEL;
 
     size_t start = *pos;
     size_t col = 1;
@@ -85,26 +89,28 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
     bool first = true;
     while (true) {
         char c = src_buf[*pos];
-        /*putchar(c);*/
-        /*putchar('\n');*/
 
-        bool next;
+        bool change;
         bool advance = true;
         size_t matchlen = *pos - start;
 
-        if (state == S_LABEL) {
-            next = !(
+        if (state == S_PLABEL) {
+            change = !(
                 (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
                 || c == '_' || (!first && c >= '0' && c <= '9'));
 
             first = false;
 
-            if (next) {
+            if (change) {
                 if (matchlen > 0) {
-                    char sym[lengthof(src_buf) + 1];
-                    memcpy(sym, &src_buf[start], *pos);
-                    sym[*pos] = '\0';
+                    char* sym = malloc(matchlen + 1);
+                    memcpy(sym, &src_buf[start], matchlen);
+                    sym[matchlen] = '\0';
                     printf("%s\n", sym);
+
+                    line.tokens[token_idx].type = T_LABEL;
+                    line.tokens[token_idx].text = sym;
+                    ++token_idx;
 
                     state = S_COLON;
                 } else {
@@ -117,24 +123,100 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
             if (c != ':')
                 fatal(1, "column %zu: Missing colon", col);
 
-            next = true;
+            change = true;
             state = S_OPCODE;
         } else if (state == S_OPCODE) {
-            next = !(c >= 'a' && c <= 'z');
+            change = !(c >= 'a' && c <= 'z');
 
-            if (next) {
+            if (change) {
                 if (matchlen > 0) {
-                    char sym[lengthof(src_buf) + 1];
-                    memcpy(sym, &src_buf[start], *pos);
-                    sym[*pos] = '\0';
+                    char* sym = malloc(matchlen + 1);
+                    memcpy(sym, &src_buf[start], matchlen);
+                    sym[matchlen] = '\0';
                     printf("%s\n", sym);
 
-                    state = S_ARG;
+                    line.tokens[token_idx].type = T_OPCODE;
+                    line.tokens[token_idx].text = sym;
+                    ++token_idx;
+
+                    state = S_OPERAND;
                 } else {
                     fatal(1, "column %zu: Missing opcode", col);
                 }
 
                 advance = false;
+            }
+        } else if (state == S_OPERAND) {
+            if (matchlen == 0) {
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                        c == '_') {
+                    change = false;
+                    line.tokens[token_idx].type = T_LABEL;
+                } else if (c == '0') {
+                    change = false;
+                } else if (c >= '1' && c <= '9') {
+                    change = false;
+                    line.tokens[token_idx].type = T_DECNUM;
+                } else {
+                    change = true;
+                    advance = false;
+                    /*fatal(1, "column %zu: Missing operand", col);*/
+                }
+            } else if (matchlen == 1 && src_buf[start] == '0') {
+                if (c >= '0' && c <= '7') {
+                    line.tokens[token_idx].type = T_OCTNUM;
+                    change = false;
+                } else if (c == 'x') {
+                    line.tokens[token_idx].type = T_HEXNUM;
+                    change = false;
+                } else {
+                    line.tokens[token_idx].type = T_DECNUM;
+                    change = true;
+                }
+            } else {
+                enum token_type type = line.tokens[token_idx].type;
+
+                if ((c >= '0' && c <= '7') || c == '_') {
+                    change = false;
+                } else if (type == T_HEXNUM && (
+                        (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) {
+                    change = false;
+                } else if ((type == T_DECNUM || type == T_HEXNUM ||
+                        type == T_LABEL) && (c == 8 || c == 9)) {
+                    change = false;
+                } else if (type == T_LABEL && ((c >= 'A' && c <= 'Z') ||
+                        (c >= 'a' && c <= 'z'))) {
+                    change = false;
+                } else {
+                    change = true;
+                    advance = false;
+
+                    char* sym = malloc(matchlen + 1);
+                    memcpy(sym, &src_buf[start], *pos);
+                    sym[matchlen] = '\0';
+                    printf("%s\n", sym);
+
+                    line.tokens[token_idx].text = sym;
+                    ++token_idx;
+
+                    state = S_COMMA;
+                }
+            }
+        } else if (state == S_COMMA) {
+            if (c == ',') {
+                state = S_OPERAND;
+            } else {
+                state = S_COMMENT;
+                advance = false;
+            }
+
+            change = true;
+        } else if (state == S_COMMENT) {
+            if (matchlen == 0) {
+                if (c != ';')
+                    fatal(1, "column %zu: expected semicolon", col);
+            } else if (c == '\n') {
+                break;
             }
         }
 
@@ -150,11 +232,11 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
             advance = false;
         }
 
-        if (next)
+        if (change)
             start = *pos;
     }
 
-    line.tokens[line_idx].type = T_NONE;
+    line.tokens[token_idx].type = T_NONE;
 
     return line;
 }
