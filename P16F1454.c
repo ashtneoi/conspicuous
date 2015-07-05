@@ -246,13 +246,13 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
                     change = false;
                     if (opd_type != O_LABEL)
                         token->number = token->number * (uint16_t)opd_type +
-                            (c - 'A');
+                            (c - 'A') + 10;
                 } else if ((opd_type == O_HEXNUM || opd_type == O_LABEL) &&
                         (c >= 'a' && c <= 'f')) {
                     change = false;
                     if (opd_type != O_LABEL)
                         token->number = token->number * (uint16_t)opd_type +
-                            (c - 'a');
+                            (c - 'a') + 10;
                 } else if ((opd_type == O_DECNUM || opd_type == O_HEXNUM ||
                           opd_type == O_LABEL) && (c == 8 || c == 9)) {
                     change = false;
