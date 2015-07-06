@@ -63,9 +63,9 @@ void print_token(struct token* token)
     }
 
     if (is_text)
-        printf("%s: %s\n", type, token->text);
+        printf("  %s: \"%s\"\n", type, token->text);
     else
-        printf("%s: %"PRIX16"\n", type, token->number);
+        printf("  %s: %"PRIX16"\n", type, token->number);
 }
 
 
@@ -137,25 +137,31 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
     while (!line_done) {
         char c = src_buf[*pos];
 
-        bool change;
+        v2("'%c'", c);
+
+        bool skipws;
         bool advance = true;
         size_t matchlen = *pos - start;
 
         struct token* token = &line.tokens[token_idx];
 
-        if (state == S_PLABEL) {
-            change = !(
+        if (c == '\n') {
+            line_done = true;
+            skipws = false;
+            print("EOL\n");
+        } else if (state == S_PLABEL) {
+            skipws = !(
                 (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
                 || c == '_' || (!first && c >= '0' && c <= '9'));
 
             first = false;
 
-            if (change) {
+            if (skipws) {
                 if (matchlen > 0) {
                     char* sym = malloc(matchlen + 1);
                     memcpy(sym, &src_buf[start], matchlen);
                     sym[matchlen] = '\0';
-                    printf("%s\n", sym);
+                    printf("token: \"%s\"\n", sym);
 
                     token->type = T_LABEL;
                     token->text = sym;
@@ -175,18 +181,18 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
             if (c != ':')
                 EXPECTED("colon");
 
-            change = true;
+            skipws = true;
             state = S_OPCODE;
             optional = true;
         } else if (state == S_OPCODE) {
-            change = !(c >= 'a' && c <= 'z');
+            skipws = !(c >= 'a' && c <= 'z');
 
-            if (change) {
+            if (skipws) {
                 if (matchlen > 0) {
                     char* sym = malloc(matchlen + 1);
                     memcpy(sym, &src_buf[start], matchlen);
                     sym[matchlen] = '\0';
-                    printf("%s\n", sym);
+                    printf("token: \"%s\"\n", sym);
 
                     token->type = T_OPCODE;
                     token->text = sym;
@@ -194,26 +200,26 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
 
                     state = S_OPERAND;
                     optional = true;
+
+                    advance = false;
                 } else {
                     EXPECTED("opcode");
                     line_done = true;
                 }
-
-                advance = false;
             }
         } else if (state == S_OPERAND) {
             if (matchlen == 0) {
                 if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
                         c == '_') {
-                    change = false;
+                    skipws = false;
                     opd_type = O_LABEL;
                     token->type = T_LABEL;
                 } else if (c == '0') {
-                    change = false;
+                    skipws = false;
                     token->type = T_NUMBER;
                     token->number = 0;
                 } else if (c >= '1' && c <= '9') {
-                    change = false;
+                    skipws = false;
                     opd_type = O_DECNUM;
                     token->type = T_NUMBER;
                     token->number = c - '0';
@@ -224,52 +230,52 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
             } else if (matchlen == 1 && src_buf[start] == '0') {
                 if (c >= '0' && c <= '7') {
                     opd_type = O_OCTNUM;
-                    change = false;
+                    skipws = false;
                     token->number = c - '0';
                 } else if (c == 'x') {
                     opd_type = O_HEXNUM;
-                    change = false;
+                    skipws = false;
                 } else {
                     opd_type = O_DECNUM;
                     state = S_COMMA;
                     optional = true;
-                    change = true;
+                    skipws = true;
                 }
             } else {
                 if ((c >= '0' && c <= '7') || c == '_') {
-                    change = false;
+                    skipws = false;
                     if (opd_type != O_LABEL)
                         token->number = token->number * (uint16_t)opd_type +
                             (c - '0');
                 } else if ((opd_type == O_HEXNUM || opd_type == O_LABEL) &&
                         (c >= 'A' && c <= 'F')) {
-                    change = false;
+                    skipws = false;
                     if (opd_type != O_LABEL)
                         token->number = token->number * (uint16_t)opd_type +
                             (c - 'A') + 10;
                 } else if ((opd_type == O_HEXNUM || opd_type == O_LABEL) &&
                         (c >= 'a' && c <= 'f')) {
-                    change = false;
+                    skipws = false;
                     if (opd_type != O_LABEL)
                         token->number = token->number * (uint16_t)opd_type +
                             (c - 'a') + 10;
                 } else if ((opd_type == O_DECNUM || opd_type == O_HEXNUM ||
                           opd_type == O_LABEL) && (c == 8 || c == 9)) {
-                    change = false;
+                    skipws = false;
                     if (opd_type != O_LABEL)
                         token->number = token->number * (uint16_t)opd_type +
                             (c - '0');
                 } else if (opd_type == O_LABEL && ((c >= 'G' && c <= 'Z') ||
                         (c >= 'g' && c <= 'z'))) {
-                    change = false;
+                    skipws = false;
                 } else {
-                    change = true;
+                    skipws = true;
                     advance = false;
 
                     char* sym = malloc(matchlen + 1);
                     memcpy(sym, &src_buf[start], matchlen);
                     sym[matchlen] = '\0';
-                    printf("%s\n", sym);
+                    printf("token: \"%s\"\n", sym);
 
                     token->text = sym;
                     ++token_idx;
@@ -288,31 +294,26 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
                 optional = true;
             }
 
-            change = true;
+            skipws = true;
         } else if (state == S_COMMENT) {
-            change = false;
-            if (matchlen == 0 && c != ';') {
-                EXPECTED("semicolon");
-                advance = false;
+            skipws = false;
+            if (matchlen == 0) {
+                if (c != ';') {
+                    EXPECTED("semicolon");
+                    fatal(1, "column %u: BUG");
+                }
             }
         }
 
-        if (src_buf[*pos] == '\n') {
-            line_done = true;
-            advance = true;
-            src_buf[*pos] = ' ';
-            start = *len;
-        }
-
-        while (advance || src_buf[*pos] == ' ') {
+        while (advance ||
+                (skipws && (src_buf[*pos] == ' ' || src_buf[*pos] == '\t'))) {
             ++*pos;
             ++col;
             if (*pos >= *len) {
                 ssize_t count = fill_buffer(src, pos, len, start);
                 if (count == 0) {
-                    if (!optional)
-                        fatal(1, "column %u: Unexpected end of line", col);
-                    line_done = true;
+                    if (!line_done || !optional)
+                        fatal(1, "column %u: Unexpected end of file", col);
                     break;
                 }
                 start = 0;
@@ -321,7 +322,7 @@ struct line lex_line(const int src, size_t* pos, size_t* len)
             advance = false;
         }
 
-        if (change)
+        if (skipws)
             start = *pos;
     }
 
