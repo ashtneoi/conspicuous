@@ -88,7 +88,7 @@ ssize_t fill_buffer(const int src, size_t* const bufpos, size_t* const buflen,
 
 
 static
-struct token* lex_number(struct token* token, const char* t, ssize_t toklen)
+struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 {
     if ('1' <= t[0] && t[0] <= '9') {
         token->type = T_NUMBER;
@@ -223,7 +223,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                     print_token(token);
                     ++token;
                 } else if ('0' <= t[0] && t[0] <= '9') {
-                    token = lex_number(token, t, toklen);
+                    token = parse_number(token, t, toklen);
                 } else {
                     fatal(1, "col %u: Invalid token", col);
                 }
