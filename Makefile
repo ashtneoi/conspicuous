@@ -28,10 +28,10 @@ clean:
 	rm -f $(OBJ) $(EXE)
 
 
-bufman.o: bufman.h
-cpic.o: bufman.h
-fail.o: fail.h
-P16F1454.o: P16F1454.h fail.h cpic.h utils.h
+bufman.o: bufman.h common.h
+cpic.o: bufman.h common.h
+fail.o: fail.h common.h
+P16F1454.o: P16F1454.h common.h fail.h cpic.h utils.h
 
 cpic: bufman.o fail.o P16F1454.o
 

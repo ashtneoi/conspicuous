@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 2
+#include "common.h"
 
 #include "cpic.h"
 
