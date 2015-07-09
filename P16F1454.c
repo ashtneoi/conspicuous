@@ -26,7 +26,6 @@ enum token_type {
     T_NUMBER,
     T_COLON,
     T_COMMA,
-    T_SEMICOLON,
     T_NONE,
 };
 
@@ -49,8 +48,6 @@ void print_token(struct token* token)
         print("  colon\n");
     else if (token->type == T_COMMA)
         print("  comma\n");
-    else if (token->type == T_SEMICOLON)
-        print("  semicolon\n");
     else
         fatal(1, "Invalid token");
 }
@@ -181,6 +178,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
     ssize_t toklen;
     bool first_buf = true;
     unsigned int col = 0;
+    bool ignore = false;
 
     do {
         //
@@ -197,8 +195,12 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
             }
             first_buf = false;
         }
-        ++col;
         c = buf[*bufpos];
+
+        if (ignore)
+            continue;
+
+        ++col;
         toklen = *bufpos - tokstart;
 
         //
@@ -233,8 +235,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                 token->type = T_COMMA;
                 token++;
             } else if (c == ';') {
-                token->type = T_SEMICOLON;
-                token++;
+                ignore = true;
             }
         } else {
             continue;
@@ -248,6 +249,30 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
     } while (c != '\n');
 
     token->type = T_NONE;
+}
+
+
+void assemble_line(const struct token* token)
+{
+    struct insn insn;
+
+    if (token[0].type != T_TEXT)
+        fatal(1, "Expected label or opcode");
+
+    if (token[1].type == T_COLON) {
+        insn.label = token[0].text;
+        token += 2;
+        if (token->type != T_TEXT)
+            fatal(1, "Missing opcode");
+    } else {
+        insn.label = NULL;
+    }
+
+    (void)insn;
+    /*if (strcasecmp(token->text*/
+
+    for (/* */; token->type != T_NONE; ++token) {
+    }
 }
 
 
