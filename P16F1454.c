@@ -33,7 +33,7 @@ enum token_type {
 struct token {
     enum token_type type;
     char* text;
-    uint16_t number;
+    uint8_t number;
 };
 
 
@@ -50,7 +50,7 @@ void print_token(struct token* token)
 
 
 struct line {
-    struct token tokens[8];
+    struct token tokens[16];
 };
 
 
@@ -88,30 +88,31 @@ ssize_t fill_buffer(const int src, size_t* const bufpos, size_t* const buflen,
 
 
 static
-struct token* lex_number(struct token* token, const char* t,
-        ssize_t* const toklen)
+struct token* lex_number(struct token* token, const char* t, ssize_t toklen)
 {
     if ('1' <= t[0] && t[0] <= '9') {
         token->type = T_NUMBER;
         token->number = t[0] - '0';
-        for (ssize_t i = 1; i < *toklen; ++i) {
-            if (t[i] <= '0' && '9' <= t[0])
+        for (ssize_t i = 1; i < toklen; ++i) {
+            if ('0' <= t[i] && t[i] <= '9')
+                token->number = token->number * 10 +
+                    t[i] - '0';
+            else
                 fatal(1, "Invalid decimal number");
-            token->number = token->number * 10 +
-                t[i] - '0';
         }
         print_token(token);
         ++token;
     } else if (t[0] == '0') {
         if (t[1] == 'b' || t[1] == 'n') {
             t += 2;
-            *toklen -= 2;
+            toklen -= 2;
 
-            ssize_t gu = *toklen; // group upper bound
+            ssize_t gu = ((toklen - 1) % 8) + 1; // group upper bound
+            ssize_t i = 0;
             do {
                 token->type = T_NUMBER;
                 token->number = 0;
-                for (ssize_t i = max(0, gu - 8); i < gu; ++i) {
+                for (/* */; i < gu; ++i) {
                     if ('0' <= t[i] && t[i] <= '1')
                         token->number = token->number * 2 +
                             t[i] - '0';
@@ -121,37 +122,34 @@ struct token* lex_number(struct token* token, const char* t,
                 print_token(token);
                 ++token;
 
-                gu -= 8;
-            } while (gu > 0);
+                gu += 8;
+            } while (gu <= toklen);
         } else if ('0' <= t[1] && t[1] <= '7') {
             ++t;
-            --*toklen;
+            --toklen;
 
-            ssize_t gu = *toklen; // group upper bound
-            do {
-                token->type = T_NUMBER;
-                token->number = 0;
-                for (ssize_t i = max(0, gu - 3); i < gu; ++i) {
-                    if ('0' <= t[i] && t[i] <= '7')
-                        token->number = token->number * 8 +
-                            t[i] - '0';
-                    else
-                        fatal(1, "Invalid octal number");
-                }
-                print_token(token);
-                ++token;
+            token->type = T_NUMBER;
+            token->number = t[0] - '0';
+            for (ssize_t i = 1; i < toklen; ++i) {
+                if ('0' <= t[i] && t[i] <= '7')
+                    token->number = token->number * 8 +
+                        t[i] - '0';
+                else
+                    fatal(1, "Invalid octal number");
+            }
+        print_token(token);
+        ++token;
 
-                gu -= 3;
-            } while (gu > 0);
         } else if (t[1] == 'x') {
             t += 2;
-            *toklen -= 2;
+            toklen -= 2;
 
-            ssize_t gu = *toklen; // group upper bound
+            ssize_t gu = ((toklen - 1) % 2) + 1; // group upper bound
+            ssize_t i = 0;
             do {
                 token->type = T_NUMBER;
                 token->number = 0;
-                for (ssize_t i = max(0, gu - 2); i < gu; ++i) {
+                for (/* */; i < gu; ++i) {
                     if ('0' <= t[i] && t[i] <= '9')
                         token->number = token->number * 16 +
                             t[i] - '0';
@@ -167,8 +165,8 @@ struct token* lex_number(struct token* token, const char* t,
                 print_token(token);
                 ++token;
 
-                gu -= 2;
-            } while (gu > 0);
+                gu += 2;
+            } while (gu <= toklen);
         }
     }
 
@@ -225,7 +223,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                     print_token(token);
                     ++token;
                 } else if ('0' <= t[0] && t[0] <= '9') {
-                    token = lex_number(token, t, &toklen);
+                    token = lex_number(token, t, toklen);
                 } else {
                     fatal(1, "col %u: Invalid token", col);
                 }
