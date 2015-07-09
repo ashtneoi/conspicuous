@@ -165,9 +165,65 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         }
         ++token;
     } else if (t[0] == '0') {
-        if (t[1] == 'b' || t[1] == 'n') {
+        token->type = T_NUMBER;
+        token->number = 0;
+
+        if (toklen == 1) {
+            ++token;
+            return token;
+        } else if (t[1] == 'b' || t[1] == 'n') {
             t += 2;
             toklen -= 2;
+
+            token->type = T_NUMBER;
+            token->number = 0;
+            for (ssize_t i = 0; i < toklen; ++i) {
+                if ('0' <= t[i] && t[i] <= '1')
+                    token->number = token->number * 2 +
+                        t[i] - '0';
+                else
+                    fatal(1, "Invalid binary number");
+            }
+            ++token;
+        } else if ('0' <= t[1] && t[1] <= '7') {
+            ++t;
+            --toklen;
+
+            token->type = T_NUMBER;
+            token->number = t[0] - '0';
+            for (ssize_t i = 1; i < toklen; ++i) {
+                if ('0' <= t[i] && t[i] <= '7')
+                    token->number = token->number * 8 +
+                        t[i] - '0';
+                else
+                    fatal(1, "Invalid octal number");
+            }
+            ++token;
+        } else if (t[1] == 'x') {
+            t += 2;
+            toklen -= 2;
+
+            for (ssize_t i = 0; i < toklen; ++i) {
+                if ('0' <= t[i] && t[i] <= '9')
+                    token->number = token->number * 16 +
+                        t[i] - '0';
+                else if ('A' <= t[i] && t[i] <= 'F')
+                    token->number = token->number * 16 +
+                        t[i] - 'A' + 10;
+                else if ('a' <= t[i] && t[i] <= 'f')
+                    token->number = token->number * 16 +
+                        t[i] - 'a' + 10;
+                else
+                    fatal(1, "Invalid hexadecimal number");
+            }
+            ++token;
+        } else {
+            fatal(1, "Invalid number");
+        }
+    } else if (t[0] == '#' && t[1] == '0') {
+        if (t[2] == 'b' || t[2] == 'n') {
+            t += 3;
+            toklen -= 3;
 
             ssize_t gu = ((toklen - 1) % 8) + 1; // group upper bound
             ssize_t i = 0;
@@ -185,24 +241,9 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 
                 gu += 8;
             } while (gu <= toklen);
-        } else if ('0' <= t[1] && t[1] <= '7') {
-            ++t;
-            --toklen;
-
-            token->type = T_NUMBER;
-            token->number = t[0] - '0';
-            for (ssize_t i = 1; i < toklen; ++i) {
-                if ('0' <= t[i] && t[i] <= '7')
-                    token->number = token->number * 8 +
-                        t[i] - '0';
-                else
-                    fatal(1, "Invalid octal number");
-            }
-        ++token;
-
-        } else if (t[1] == 'x') {
-            t += 2;
-            toklen -= 2;
+        } else if (t[2] == 'x') {
+            t += 3;
+            toklen -= 3;
 
             ssize_t gu = ((toklen - 1) % 2) + 1; // group upper bound
             ssize_t i = 0;
@@ -226,6 +267,8 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 
                 gu += 2;
             } while (gu <= toklen);
+        } else {
+            fatal(1, "Invalid number");
         }
     }
 
@@ -285,7 +328,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                     memcpy(token->text, t, toklen);
                     token->text[toklen] = '\0';
                     ++token;
-                } else if ('0' <= t[0] && t[0] <= '9') {
+                } else if (t[0] == '#' || ('0' <= t[0] && t[0] <= '9')) {
                     token = parse_number(token, t, toklen);
                 } else {
                     fatal(1, "col %u: Invalid token", col);
