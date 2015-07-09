@@ -26,6 +26,7 @@ enum token_type {
     T_NUMBER,
     T_COLON,
     T_COMMA,
+    T_SEMICOLON,
     T_NONE,
 };
 
@@ -44,6 +45,12 @@ void print_token(struct token* token)
         printf("  text: \"%s\"\n", token->text);
     else if (token->type == T_NUMBER)
         printf("  number: %"PRIX16"\n", token->number);
+    else if (token->type == T_COLON)
+        print("  colon\n");
+    else if (token->type == T_COMMA)
+        print("  comma\n");
+    else if (token->type == T_SEMICOLON)
+        print("  semicolon\n");
     else
         fatal(1, "Invalid token");
 }
@@ -100,7 +107,6 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
             else
                 fatal(1, "Invalid decimal number");
         }
-        print_token(token);
         ++token;
     } else if (t[0] == '0') {
         if (t[1] == 'b' || t[1] == 'n') {
@@ -119,7 +125,6 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                     else
                         fatal(1, "Invalid binary number");
                 }
-                print_token(token);
                 ++token;
 
                 gu += 8;
@@ -137,7 +142,6 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                 else
                     fatal(1, "Invalid octal number");
             }
-        print_token(token);
         ++token;
 
         } else if (t[1] == 'x') {
@@ -162,7 +166,6 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                     else
                         fatal(1, "Invalid hexadecimal number");
                 }
-                print_token(token);
                 ++token;
 
                 gu += 2;
@@ -220,13 +223,23 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                     token->text = malloc(toklen + 1);
                     memcpy(token->text, t, toklen);
                     token->text[toklen] = '\0';
-                    print_token(token);
                     ++token;
                 } else if ('0' <= t[0] && t[0] <= '9') {
                     token = parse_number(token, t, toklen);
                 } else {
                     fatal(1, "col %u: Invalid token", col);
                 }
+            }
+
+            if (c == ':') {
+                token->type = T_COLON;
+                token++;
+            } else if (c == ',') {
+                token->type = T_COMMA;
+                token++;
+            } else if (c == ';') {
+                token->type = T_SEMICOLON;
+                token++;
             }
         } else {
             continue;
@@ -252,9 +265,9 @@ bool assemble_16F1454(const int src)
         v2("Lexing line");
         struct line line;
         lex_line(line.tokens, src, &bufpos, &buflen);
-        /*for (unsigned int i = 0; i < lengthof(line.tokens) &&*/
-                /*line.tokens[i].type != T_NONE; ++i)*/
-            /*print_token(&line.tokens[i]);*/
+        for (unsigned int i = 0; i < lengthof(line.tokens) &&
+                line.tokens[i].type != T_NONE; ++i)
+            print_token(&line.tokens[i]);
         if (buflen == 0)
             break;
     }
