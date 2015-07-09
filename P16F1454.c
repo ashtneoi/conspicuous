@@ -56,11 +56,6 @@ void print_token(struct token* token)
 }
 
 
-struct line {
-    struct token tokens[16];
-};
-
-
 struct insn {
     char* label;
     int opcode;
@@ -263,11 +258,11 @@ bool assemble_16F1454(const int src)
 
     while (true) {
         v2("Lexing line");
-        struct line line;
-        lex_line(line.tokens, src, &bufpos, &buflen);
-        for (unsigned int i = 0; i < lengthof(line.tokens) &&
-                line.tokens[i].type != T_NONE; ++i)
-            print_token(&line.tokens[i]);
+        struct token tokens[16];
+        lex_line(tokens, src, &bufpos, &buflen);
+        for (unsigned int i = 0; i < lengthof(tokens) &&
+                tokens[i].type != T_NONE; ++i)
+            print_token(&tokens[i]);
         if (buflen == 0)
             break;
     }
