@@ -363,7 +363,8 @@ struct insn* parse_line(struct insn* const prev_insn,
         const struct token* token, unsigned int l)
 {
     struct insn* insn = malloc(sizeof(struct insn));
-    prev_insn->next = insn;
+    if (prev_insn != NULL)
+        prev_insn->next = insn;
 
     if (token[0].type != T_TEXT)
         fatal(1, "line %u: Expected label or opcode", l);
@@ -475,15 +476,15 @@ struct insn* parse_line(struct insn* const prev_insn,
     } else if (strcasecmp(token->text, "bsf") == 0) {
         opc = C_BSF;
         opd[0] = F;
-        opd[1] = D;
+        opd[1] = B;
     } else if (strcasecmp(token->text, "btfsc") == 0) {
         opc = C_BTFSC;
         opd[0] = F;
-        opd[1] = D;
+        opd[1] = B;
     } else if (strcasecmp(token->text, "btfss") == 0) {
         opc = C_BTFSS;
         opd[0] = F;
-        opd[1] = D;
+        opd[1] = B;
     } else if (strcasecmp(token->text, "addlw") == 0) {
         opc = C_ADDLW;
         opd[0] = K;
@@ -608,7 +609,9 @@ bool assemble_16F1454(const int src)
     size_t bufpos = 0;
     size_t buflen = 1;
 
-    while (true) {
+    struct insn* insn = NULL;
+
+    for (unsigned int l = 1; /* */; ++l) {
         v2("Lexing line");
         struct token tokens[16];
         lex_line(tokens, src, &bufpos, &buflen);
@@ -617,6 +620,7 @@ bool assemble_16F1454(const int src)
             print_token(&tokens[i]);
         if (buflen == 0)
             break;
+        insn = parse_line(insn, tokens, l);
     }
 
     return false;
