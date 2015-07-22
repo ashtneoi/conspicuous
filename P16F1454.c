@@ -194,47 +194,47 @@ struct opcode_info opcode_info_list[] = {
 
     [C_ADDLW] =
         { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
     [C_ANDLW] =
         { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
     [C_IORLW] =
         { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
     [C_MOVLB] =
         { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, N},
-        .kwid = 5 },
+            .kwid = 5 },
     [C_MOVLP] =
         { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, N},
-        .kwid = 7 },
+            .kwid = 7 },
     [C_MOVLW] =
         { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
     [C_SUBLW] =
         { .opc = C_SUBLW, .str = "sublw", .word = 0x3C00, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
     [C_XORLW] =
         { .opc = C_XORLW, .str = "xorlw", .word = 0x3A00, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
 
     [C_BRA] =
         { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {K, N},
-        .kwid = 9 },
+            .kwid = 9 },
     [C_BRW] =
         { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {N, N} },
     [C_CALL] =
         { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {K, N},
-        .kwid = 11 },
+            .kwid = 11 },
     [C_CALLW] =
         { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {N, N} },
     [C_GOTO] =
         { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {K, N},
-        .kwid = 11 },
+            .kwid = 11 },
     [C_RETFIE] =
         { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {N, N} },
     [C_RETLW] =
         { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, N},
-        .kwid = 8 },
+            .kwid = 8 },
     [C_RETURN] =
         { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {N, N} },
 
@@ -532,6 +532,9 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
 struct insn* parse_line(struct insn* const prev_insn,
         const struct token* token, unsigned int l)
 {
+    if (token[0].type == T_NONE)
+        return NULL;
+
     struct insn* insn = malloc(sizeof(struct insn));
     if (prev_insn != NULL)
         prev_insn->next = insn;
@@ -672,8 +675,11 @@ bool assemble_16F1454(const int src)
             print_token(&tokens[i]);
         if (buflen == 0)
             break;
-        insn = parse_line(insn, tokens, l);
-        printf("0x%04"PRIX16"\n", assemble_insn(insn));
+        struct insn* next_insn = parse_line(insn, tokens, l);
+        if (next_insn != NULL) {
+            insn = next_insn;
+            printf("0x%04"PRIX16"\n", assemble_insn(insn));
+        }
     }
 
     return false;
