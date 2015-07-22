@@ -44,7 +44,7 @@ void print_token(struct token* token)
     if (token->type == T_TEXT)
         printf("  text: \"%s\"\n", token->text);
     else if (token->type == T_NUMBER)
-        printf("  number: %"PRIX16"\n", token->number);
+        printf("  number: 0x%"PRIX16"\n", token->number);
     else if (token->type == T_COLON)
         print("  colon\n");
     else if (token->type == T_COMMA)
@@ -111,6 +111,122 @@ enum opcode {
     C_TRIS,
 
     // TODO: implement ADDFSR, MOVIW, and MOVWI
+};
+
+
+const char* opcodes[] = {
+    [C_ADDWF] = "addwf",
+    [C_ADDWFC] = "addwfc",
+    [C_ANDWF] = "andwf",
+    [C_ASRF] = "asrf",
+    [C_LSLF] = "lslf",
+    [C_LSRF] = "lsrf",
+    [C_CLRF] = "clrf",
+    [C_CLRW] = "clrw",
+    [C_COMF] = "comf",
+    [C_DECF] = "decf",
+    [C_INCF] = "incf",
+    [C_IORWF] = "iorwf",
+    [C_MOVF] = "movf",
+    [C_MOVWF] = "movwf",
+    [C_RLF] = "rlf",
+    [C_RRF] = "rrf",
+    [C_SUBWF] = "subwf",
+    [C_SUBWFB] = "subwfb",
+    [C_SWAPF] = "swapf",
+    [C_XORWF] = "xorwf",
+
+    [C_DECFSZ] = "decfsz",
+    [C_INCFSZ] = "incfsz",
+
+    [C_BCF] = "bcf",
+    [C_BSF] = "bsf",
+
+    [C_BTFSC] = "btfsc",
+    [C_BTFSS] = "btfss",
+
+    [C_ADDLW] = "add",
+    [C_ANDLW] = "andlw",
+    [C_IORLW] = "iorlw",
+    [C_MOVLB] = "movlb",
+    [C_MOVLP] = "movlp",
+    [C_MOVLW] = "movlw",
+    [C_SUBLW] = "sublw",
+    [C_XORLW] = "xorlw",
+
+    [C_BRA] = "bra",
+    [C_BRW] = "brw",
+    [C_CALL] = "call",
+    [C_CALLW] = "callw",
+    [C_GOTO] = "goto",
+    [C_RETFIE] = "retfie",
+    [C_RETLW] = "retlw",
+    [C_RETURN] = "return",
+
+    [C_CLRWDT] = "clrwdt",
+    [C_NOP] = "nop",
+    [C_OPTION] = "option",
+    [C_RESET] = "reset",
+    [C_SLEEP] = "sleep",
+    [C_TRIS] = "tris",
+};
+
+
+uint16_t opcode_words[] = {
+    [C_ADDWF] = 0x0700,
+    [C_ADDWFC] = 0x3D00,
+    [C_ANDWF] = 0x0500,
+    [C_ASRF] = 0x3700,
+    [C_LSLF] = 0x3500,
+    [C_LSRF] = 0x3600,
+    [C_CLRF] = 0x0180,
+    [C_CLRW] = 0x0100,
+    [C_COMF] = 0x0900,
+    [C_DECF] = 0x0300,
+    [C_INCF] = 0x0A00,
+    [C_IORWF] = 0x0400,
+    [C_MOVF] = 0x0800,
+    [C_MOVWF] = 0x0080,
+    [C_RLF] = 0x0D00,
+    [C_RRF] = 0x0C00,
+    [C_SUBWF] = 0x0200,
+    [C_SUBWFB] = 0x3B00,
+    [C_SWAPF] = 0x0E00,
+    [C_XORWF] = 0x0600,
+
+    [C_DECFSZ] = 0x0C00,
+    [C_INCFSZ] = 0x0F00,
+
+    [C_BCF] = 0x1000,
+    [C_BSF] = 0x1400,
+
+    [C_BTFSC] = 0x1800,
+    [C_BTFSS] = 0x1C00,
+
+    [C_ADDLW] = 0x3E00,
+    [C_ANDLW] = 0x3900,
+    [C_IORLW] = 0x3800,
+    [C_MOVLB] = 0x0020,
+    [C_MOVLP] = 0x3180,
+    [C_MOVLW] = 0x3000,
+    [C_SUBLW] = 0x3C00,
+    [C_XORLW] = 0x3A00,
+
+    [C_BRA] = 0x3200,
+    [C_BRW] = 0x000B,
+    [C_CALL] = 0x2000,
+    [C_CALLW] = 0x000A,
+    [C_GOTO] = 0x2800,
+    [C_RETFIE] = 0x0009,
+    [C_RETLW] = 0x3400,
+    [C_RETURN] = 0x0008,
+
+    [C_CLRWDT] = 0x0064,
+    [C_NOP] = 0x0000,
+    [C_OPTION] = 0x0062,
+    [C_RESET] = 0x0001,
+    [C_SLEEP] = 0x0063,
+    [C_TRIS] = 0x0060,
 };
 
 
@@ -380,13 +496,15 @@ struct insn* parse_line(struct insn* const prev_insn,
 
     enum opcode opc = insn->opcode;
     enum {
+        X,
         F,
         B,
         K,
         D,
-        X,
         // TODO: Implement N and MM.
     } opd[2] = {X, X};
+
+    int kwidth = 0;
 
 
     if (strcasecmp(token->text, "addwf") == 0) {
@@ -407,6 +525,10 @@ struct insn* parse_line(struct insn* const prev_insn,
         opd[1] = D;
     } else if (strcasecmp(token->text, "lslf") == 0) {
         opc = C_LSLF;
+        opd[0] = F;
+        opd[1] = D;
+    } else if (strcasecmp(token->text, "lsrf") == 0) {
+        opc = C_LSRF;
         opd[0] = F;
         opd[1] = D;
     } else if (strcasecmp(token->text, "clrf") == 0) {
@@ -488,46 +610,57 @@ struct insn* parse_line(struct insn* const prev_insn,
     } else if (strcasecmp(token->text, "addlw") == 0) {
         opc = C_ADDLW;
         opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "andlw") == 0) {
         opc = C_ANDLW;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "iorlw") == 0) {
         opc = C_IORLW;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "movlb") == 0) {
         opc = C_MOVLB;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 5;
     } else if (strcasecmp(token->text, "movlp") == 0) {
         opc = C_MOVLP;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 7;
     } else if (strcasecmp(token->text, "movlw") == 0) {
         opc = C_MOVLW;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "sublw") == 0) {
         opc = C_SUBLW;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "xorlw") == 0) {
         opc = C_XORLW;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "bra") == 0) {
         opc = C_BRA;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 9;
     } else if (strcasecmp(token->text, "brw") == 0) {
         opc = C_BRW;
     } else if (strcasecmp(token->text, "call") == 0) {
         opc = C_CALL;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 11;
     } else if (strcasecmp(token->text, "callw") == 0) {
         opc = C_CALLW;
     } else if (strcasecmp(token->text, "goto") == 0) {
         opc = C_GOTO;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 11;
     } else if (strcasecmp(token->text, "retfie") == 0) {
         opc = C_RETFIE;
-        opd[0] = F;
     } else if (strcasecmp(token->text, "retlw") == 0) {
         opc = C_RETLW;
-        opd[0] = F;
+        opd[0] = K;
+        kwidth = 8;
     } else if (strcasecmp(token->text, "return") == 0) {
         opc = C_RETURN;
     } else if (strcasecmp(token->text, "clrwdt") == 0) {
@@ -553,10 +686,12 @@ struct insn* parse_line(struct insn* const prev_insn,
     for (unsigned int i = 0; i < 2 && opd[i] != X; ++i) {
         if (i == 1) {
             if (token->type != T_COMMA) {
-                if (opd[1] == D)
+                if (opd[1] == D) {
+                    insn->d = 1;
                     break;
-                else
+                } else {
                     fatal(1, "line %u: Expected comma", l);
+                }
             }
             ++token;
         }
@@ -564,6 +699,8 @@ struct insn* parse_line(struct insn* const prev_insn,
         if (opd[i] == F) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected register", l);
+            else if (token->number >= 1<<8)
+                fatal(1, "line %u: Address out of range", l);
             insn->f = token->number;
         } else if (opd[i] == B) {
             if (token->type != T_NUMBER)
@@ -574,6 +711,8 @@ struct insn* parse_line(struct insn* const prev_insn,
         } else if (opd[i] == K) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected constant", l);
+            else if (token->number >= 1<<kwidth)
+                fatal(1, "line %u: Literal out of range", l);
             insn->k = token->number;
         } else if (opd[i] == D) {
             if (token->type != T_NUMBER)
@@ -604,6 +743,48 @@ struct insn* parse_line(struct insn* const prev_insn,
 }
 
 
+static
+uint16_t assemble_insn(const struct insn* insn)
+{
+    enum opcode opc = insn->opcode;
+
+    uint16_t word = opcode_words[opc];
+
+    if (
+            opc == C_ADDWF || opc == C_ADDWFC ||
+            opc == C_ANDWF || opc == C_LSLF ||
+            opc == C_LSRF || opc == C_CLRF ||
+            opc == C_COMF || opc == C_DECF ||
+            opc == C_INCF || opc == C_IORWF ||
+            opc == C_MOVF || opc == C_MOVWF ||
+            opc == C_RLF || opc == C_RRF ||
+            opc == C_SUBWF || opc == C_SUBWFB ||
+            opc == C_SWAPF || opc == C_XORWF ||
+            opc == C_DECFSZ || opc == C_INCFSZ) {
+        if (opc == C_CLRF || opc == C_MOVWF || insn->d)
+            word |= 0x0080;
+        word |= insn->f;
+    } else if (
+            opc == C_BCF || opc == C_BSF ||
+            opc == C_BTFSC || opc == C_BTFSS) {
+        word |= (insn->b << 7) | insn->f;
+    } else if (
+            opc == C_ADDLW || opc == C_ANDLW ||
+            opc == C_IORLW || opc == C_MOVLB ||
+            opc == C_MOVLP || opc == C_MOVLW ||
+            opc == C_SUBLW || opc == C_XORLW ||
+            opc == C_BRA || opc == C_CALL ||
+            opc == C_GOTO || opc == C_RETLW) {
+        word |= insn->k;
+    } else if (opc == C_TRIS) {
+        word |= insn->f;
+    }
+
+
+    return word;
+}
+
+
 bool assemble_16F1454(const int src)
 {
     size_t bufpos = 0;
@@ -621,6 +802,7 @@ bool assemble_16F1454(const int src)
         if (buflen == 0)
             break;
         insn = parse_line(insn, tokens, l);
+        printf("0x%"PRIX16"\n", assemble_insn(insn));
     }
 
     return false;
