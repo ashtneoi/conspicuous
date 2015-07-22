@@ -14,6 +14,7 @@
 
 #define CHUNK_LEN 32
 #define BUFCAP (CHUNK_LEN * 2)
+#define OPCODE_DICT_CAP 128
 
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #define max(x, y) ((x) > (y) ? (x) : (y))
@@ -34,7 +35,7 @@ enum token_type {
 struct token {
     enum token_type type;
     char* text;
-    uint16_t number;
+    uint16_t num;
 };
 
 
@@ -44,7 +45,7 @@ void print_token(struct token* token)
     if (token->type == T_TEXT)
         printf("  text: \"%s\"\n", token->text);
     else if (token->type == T_NUMBER)
-        printf("  number: 0x%"PRIX16"\n", token->number);
+        printf("  number: 0x%04"PRIX16"\n", token->num);
     else if (token->type == T_COLON)
         print("  colon\n");
     else if (token->type == T_COMMA)
@@ -55,6 +56,7 @@ void print_token(struct token* token)
 
 
 enum opcode {
+    C_NONE,
     C_ADDWF,
     C_ADDWFC,
     C_ANDWF,
@@ -114,125 +116,177 @@ enum opcode {
 };
 
 
-const char* opcodes[] = {
-    [C_ADDWF] = "addwf",
-    [C_ADDWFC] = "addwfc",
-    [C_ANDWF] = "andwf",
-    [C_ASRF] = "asrf",
-    [C_LSLF] = "lslf",
-    [C_LSRF] = "lsrf",
-    [C_CLRF] = "clrf",
-    [C_CLRW] = "clrw",
-    [C_COMF] = "comf",
-    [C_DECF] = "decf",
-    [C_INCF] = "incf",
-    [C_IORWF] = "iorwf",
-    [C_MOVF] = "movf",
-    [C_MOVWF] = "movwf",
-    [C_RLF] = "rlf",
-    [C_RRF] = "rrf",
-    [C_SUBWF] = "subwf",
-    [C_SUBWFB] = "subwfb",
-    [C_SWAPF] = "swapf",
-    [C_XORWF] = "xorwf",
-
-    [C_DECFSZ] = "decfsz",
-    [C_INCFSZ] = "incfsz",
-
-    [C_BCF] = "bcf",
-    [C_BSF] = "bsf",
-
-    [C_BTFSC] = "btfsc",
-    [C_BTFSS] = "btfss",
-
-    [C_ADDLW] = "add",
-    [C_ANDLW] = "andlw",
-    [C_IORLW] = "iorlw",
-    [C_MOVLB] = "movlb",
-    [C_MOVLP] = "movlp",
-    [C_MOVLW] = "movlw",
-    [C_SUBLW] = "sublw",
-    [C_XORLW] = "xorlw",
-
-    [C_BRA] = "bra",
-    [C_BRW] = "brw",
-    [C_CALL] = "call",
-    [C_CALLW] = "callw",
-    [C_GOTO] = "goto",
-    [C_RETFIE] = "retfie",
-    [C_RETLW] = "retlw",
-    [C_RETURN] = "return",
-
-    [C_CLRWDT] = "clrwdt",
-    [C_NOP] = "nop",
-    [C_OPTION] = "option",
-    [C_RESET] = "reset",
-    [C_SLEEP] = "sleep",
-    [C_TRIS] = "tris",
+enum operand {
+    N,
+    F,
+    B,
+    K,
+    D,
+    // TODO: Implement N and MM.
 };
 
 
-uint16_t opcode_words[] = {
-    [C_ADDWF] = 0x0700,
-    [C_ADDWFC] = 0x3D00,
-    [C_ANDWF] = 0x0500,
-    [C_ASRF] = 0x3700,
-    [C_LSLF] = 0x3500,
-    [C_LSRF] = 0x3600,
-    [C_CLRF] = 0x0180,
-    [C_CLRW] = 0x0100,
-    [C_COMF] = 0x0900,
-    [C_DECF] = 0x0300,
-    [C_INCF] = 0x0A00,
-    [C_IORWF] = 0x0400,
-    [C_MOVF] = 0x0800,
-    [C_MOVWF] = 0x0080,
-    [C_RLF] = 0x0D00,
-    [C_RRF] = 0x0C00,
-    [C_SUBWF] = 0x0200,
-    [C_SUBWFB] = 0x3B00,
-    [C_SWAPF] = 0x0E00,
-    [C_XORWF] = 0x0600,
-
-    [C_DECFSZ] = 0x0C00,
-    [C_INCFSZ] = 0x0F00,
-
-    [C_BCF] = 0x1000,
-    [C_BSF] = 0x1400,
-
-    [C_BTFSC] = 0x1800,
-    [C_BTFSS] = 0x1C00,
-
-    [C_ADDLW] = 0x3E00,
-    [C_ANDLW] = 0x3900,
-    [C_IORLW] = 0x3800,
-    [C_MOVLB] = 0x0020,
-    [C_MOVLP] = 0x3180,
-    [C_MOVLW] = 0x3000,
-    [C_SUBLW] = 0x3C00,
-    [C_XORLW] = 0x3A00,
-
-    [C_BRA] = 0x3200,
-    [C_BRW] = 0x000B,
-    [C_CALL] = 0x2000,
-    [C_CALLW] = 0x000A,
-    [C_GOTO] = 0x2800,
-    [C_RETFIE] = 0x0009,
-    [C_RETLW] = 0x3400,
-    [C_RETURN] = 0x0008,
-
-    [C_CLRWDT] = 0x0064,
-    [C_NOP] = 0x0000,
-    [C_OPTION] = 0x0062,
-    [C_RESET] = 0x0001,
-    [C_SLEEP] = 0x0063,
-    [C_TRIS] = 0x0060,
+struct opcode_info {
+    enum opcode opc;
+    const char* str;
+    uint16_t word;
+    enum operand opds[2];
+    int kwid;
 };
+
+
+struct opcode_info opcode_info_list[] = {
+    [C_ADDWF] =
+        { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D} },
+    [C_ADDWFC] =
+        { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D} },
+    [C_ANDWF] =
+        { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D} },
+    [C_ASRF] =
+        { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D} },
+    [C_LSLF] =
+        { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D} },
+    [C_LSRF] =
+        { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D} },
+    [C_CLRF] =
+        { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, N} },
+    [C_CLRW] =
+        { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {N, N} },
+    [C_COMF] =
+        { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D} },
+    [C_DECF] =
+        { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D} },
+    [C_INCF] =
+        { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D} },
+    [C_IORWF] =
+        { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D} },
+    [C_MOVF] =
+        { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D} },
+    [C_MOVWF] =
+        { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, N} },
+    [C_RLF] =
+        { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D} },
+    [C_RRF] =
+        { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D} },
+    [C_SUBWF] =
+        { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D} },
+    [C_SUBWFB] =
+        { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {F, D} },
+    [C_SWAPF] =
+        { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D} },
+    [C_XORWF] =
+        { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D} },
+
+    [C_DECFSZ] =
+        { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0C00, .opds = {F, D} },
+    [C_INCFSZ] =
+        { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D} },
+
+    [C_BCF] =
+        { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B} },
+    [C_BSF] =
+        { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {F, B} },
+
+    [C_BTFSC] =
+        { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B} },
+    [C_BTFSS] =
+        { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B} },
+
+    [C_ADDLW] =
+        { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, N},
+        .kwid = 8 },
+    [C_ANDLW] =
+        { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, N},
+        .kwid = 8 },
+    [C_IORLW] =
+        { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, N},
+        .kwid = 8 },
+    [C_MOVLB] =
+        { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, N},
+        .kwid = 5 },
+    [C_MOVLP] =
+        { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, N},
+        .kwid = 7 },
+    [C_MOVLW] =
+        { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, N},
+        .kwid = 8 },
+    [C_SUBLW] =
+        { .opc = C_SUBLW, .str = "sublw", .word = 0x3C00, .opds = {K, N},
+        .kwid = 8 },
+    [C_XORLW] =
+        { .opc = C_XORLW, .str = "xorlw", .word = 0x3A00, .opds = {K, N},
+        .kwid = 8 },
+
+    [C_BRA] =
+        { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {K, N},
+        .kwid = 9 },
+    [C_BRW] =
+        { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {N, N} },
+    [C_CALL] =
+        { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {K, N},
+        .kwid = 11 },
+    [C_CALLW] =
+        { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {N, N} },
+    [C_GOTO] =
+        { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {K, N},
+        .kwid = 11 },
+    [C_RETFIE] =
+        { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {N, N} },
+    [C_RETLW] =
+        { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, N},
+        .kwid = 8 },
+    [C_RETURN] =
+        { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {N, N} },
+
+    [C_CLRWDT] =
+        { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {N, N} },
+    [C_NOP] =
+        { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {N, N} },
+    [C_OPTION] =
+        { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {N, N} },
+    [C_RESET] =
+        { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {N, N} },
+    [C_SLEEP] =
+        { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {N, N} },
+    [C_TRIS] =
+        { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {F, N} },
+};
+
+
+struct opcode_info* opcode_info[OPCODE_DICT_CAP * 2];
+
+
+// djb2 by Dan Bernstein
+static unsigned long hash(const char* str)
+{
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *(str++)))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
+
+static
+void init_opcode_dict()
+{
+    for (unsigned int i = 0; i < lengthof(opcode_info); ++i)
+        opcode_info[i] = NULL;
+
+    for (unsigned int i = C_ADDWF; i <= C_TRIS; ++i) {
+        unsigned int h = hash(opcode_info_list[i].str) % OPCODE_DICT_CAP;
+        while (opcode_info[h] != NULL)
+            ++h;
+        opcode_info[h] = &opcode_info_list[i];
+    }
+}
 
 
 struct insn {
     char* label;
-    enum opcode opcode;
+    enum opcode opc;
     unsigned int f; // register file address
     unsigned int b; // bit number
     char* b_str;
@@ -271,10 +325,10 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 {
     if ('1' <= t[0] && t[0] <= '9') {
         token->type = T_NUMBER;
-        token->number = t[0] - '0';
+        token->num = t[0] - '0';
         for (ssize_t i = 1; i < toklen; ++i) {
             if ('0' <= t[i] && t[i] <= '9')
-                token->number = token->number * 10 +
+                token->num = token->num * 10 +
                     t[i] - '0';
             else
                 fatal(1, "Invalid decimal number");
@@ -282,7 +336,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         ++token;
     } else if (t[0] == '0') {
         token->type = T_NUMBER;
-        token->number = 0;
+        token->num = 0;
 
         if (toklen == 1) {
             ++token;
@@ -292,10 +346,10 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
             toklen -= 2;
 
             token->type = T_NUMBER;
-            token->number = 0;
+            token->num = 0;
             for (ssize_t i = 0; i < toklen; ++i) {
                 if ('0' <= t[i] && t[i] <= '1')
-                    token->number = token->number * 2 +
+                    token->num = token->num * 2 +
                         t[i] - '0';
                 else
                     fatal(1, "Invalid binary number");
@@ -306,10 +360,10 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
             --toklen;
 
             token->type = T_NUMBER;
-            token->number = t[0] - '0';
+            token->num = t[0] - '0';
             for (ssize_t i = 1; i < toklen; ++i) {
                 if ('0' <= t[i] && t[i] <= '7')
-                    token->number = token->number * 8 +
+                    token->num = token->num * 8 +
                         t[i] - '0';
                 else
                     fatal(1, "Invalid octal number");
@@ -321,13 +375,13 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 
             for (ssize_t i = 0; i < toklen; ++i) {
                 if ('0' <= t[i] && t[i] <= '9')
-                    token->number = token->number * 16 +
+                    token->num = token->num * 16 +
                         t[i] - '0';
                 else if ('A' <= t[i] && t[i] <= 'F')
-                    token->number = token->number * 16 +
+                    token->num = token->num * 16 +
                         t[i] - 'A' + 10;
                 else if ('a' <= t[i] && t[i] <= 'f')
-                    token->number = token->number * 16 +
+                    token->num = token->num * 16 +
                         t[i] - 'a' + 10;
                 else
                     fatal(1, "Invalid hexadecimal number");
@@ -345,10 +399,10 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
             ssize_t i = 0;
             do {
                 token->type = T_NUMBER;
-                token->number = 0;
+                token->num = 0;
                 for (/* */; i < gu; ++i) {
                     if ('0' <= t[i] && t[i] <= '1')
-                        token->number = token->number * 2 +
+                        token->num = token->num * 2 +
                             t[i] - '0';
                     else
                         fatal(1, "Invalid binary number");
@@ -365,16 +419,16 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
             ssize_t i = 0;
             do {
                 token->type = T_NUMBER;
-                token->number = 0;
+                token->num = 0;
                 for (/* */; i < gu; ++i) {
                     if ('0' <= t[i] && t[i] <= '9')
-                        token->number = token->number * 16 +
+                        token->num = token->num * 16 +
                             t[i] - '0';
                     else if ('A' <= t[i] && t[i] <= 'F')
-                        token->number = token->number * 16 +
+                        token->num = token->num * 16 +
                             t[i] - 'A' + 10;
                     else if ('a' <= t[i] && t[i] <= 'f')
-                        token->number = token->number * 16 +
+                        token->num = token->num * 16 +
                             t[i] - 'a' + 10;
                     else
                         fatal(1, "Invalid hexadecimal number");
@@ -494,199 +548,24 @@ struct insn* parse_line(struct insn* const prev_insn,
         insn->label = NULL;
     }
 
-    enum opcode opc = insn->opcode;
-    enum {
-        X,
-        F,
-        B,
-        K,
-        D,
-        // TODO: Implement N and MM.
-    } opd[2] = {X, X};
+    struct opcode_info* oi;
+    {
+        unsigned int i;
+        for (i = hash(token->text) % OPCODE_DICT_CAP;
+                strcmp(token->text, opcode_info[i]->str) != 0; ++i) {
+            if (i >= lengthof(opcode_info) || opcode_info[i]->opc == C_NONE)
+                fatal(1, "line %u: Invalid opcode", l);
+        }
 
-    int kwidth = 0;
-
-
-    if (strcasecmp(token->text, "addwf") == 0) {
-        opc = C_ADDWF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "addwfc") == 0) {
-        opc = C_ADDWFC;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "andwf") == 0) {
-        opc = C_ANDWF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "asrf") == 0) {
-        opc = C_ASRF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "lslf") == 0) {
-        opc = C_LSLF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "lsrf") == 0) {
-        opc = C_LSRF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "clrf") == 0) {
-        opc = C_CLRF;
-        opd[0] = F;
-    } else if (strcasecmp(token->text, "clrw") == 0) {
-        opc = C_CLRW;
-    } else if (strcasecmp(token->text, "comf") == 0) {
-        opc = C_COMF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "decf") == 0) {
-        opc = C_DECF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "incf") == 0) {
-        opc = C_INCF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "iorwf") == 0) {
-        opc = C_IORWF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "movf") == 0) {
-        opc = C_MOVF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "movwf") == 0) {
-        opc = C_MOVWF;
-        opd[0] = F;
-    } else if (strcasecmp(token->text, "rlf") == 0) {
-        opc = C_RLF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "rrf") == 0) {
-        opc = C_RRF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "subwf") == 0) {
-        opc = C_SUBWF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "subwfb") == 0) {
-        opc = C_SUBWFB;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "swapf") == 0) {
-        opc = C_SWAPF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "xorwf") == 0) {
-        opc = C_XORWF;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "decfsz") == 0) {
-        opc = C_DECFSZ;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "incfsz") == 0) {
-        opc = C_INCFSZ;
-        opd[0] = F;
-        opd[1] = D;
-    } else if (strcasecmp(token->text, "bcf") == 0) {
-        opc = C_BCF;
-        opd[0] = F;
-        opd[1] = B;
-    } else if (strcasecmp(token->text, "bsf") == 0) {
-        opc = C_BSF;
-        opd[0] = F;
-        opd[1] = B;
-    } else if (strcasecmp(token->text, "btfsc") == 0) {
-        opc = C_BTFSC;
-        opd[0] = F;
-        opd[1] = B;
-    } else if (strcasecmp(token->text, "btfss") == 0) {
-        opc = C_BTFSS;
-        opd[0] = F;
-        opd[1] = B;
-    } else if (strcasecmp(token->text, "addlw") == 0) {
-        opc = C_ADDLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "andlw") == 0) {
-        opc = C_ANDLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "iorlw") == 0) {
-        opc = C_IORLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "movlb") == 0) {
-        opc = C_MOVLB;
-        opd[0] = K;
-        kwidth = 5;
-    } else if (strcasecmp(token->text, "movlp") == 0) {
-        opc = C_MOVLP;
-        opd[0] = K;
-        kwidth = 7;
-    } else if (strcasecmp(token->text, "movlw") == 0) {
-        opc = C_MOVLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "sublw") == 0) {
-        opc = C_SUBLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "xorlw") == 0) {
-        opc = C_XORLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "bra") == 0) {
-        opc = C_BRA;
-        opd[0] = K;
-        kwidth = 9;
-    } else if (strcasecmp(token->text, "brw") == 0) {
-        opc = C_BRW;
-    } else if (strcasecmp(token->text, "call") == 0) {
-        opc = C_CALL;
-        opd[0] = K;
-        kwidth = 11;
-    } else if (strcasecmp(token->text, "callw") == 0) {
-        opc = C_CALLW;
-    } else if (strcasecmp(token->text, "goto") == 0) {
-        opc = C_GOTO;
-        opd[0] = K;
-        kwidth = 11;
-    } else if (strcasecmp(token->text, "retfie") == 0) {
-        opc = C_RETFIE;
-    } else if (strcasecmp(token->text, "retlw") == 0) {
-        opc = C_RETLW;
-        opd[0] = K;
-        kwidth = 8;
-    } else if (strcasecmp(token->text, "return") == 0) {
-        opc = C_RETURN;
-    } else if (strcasecmp(token->text, "clrwdt") == 0) {
-        opc = C_CLRWDT;
-    } else if (strcasecmp(token->text, "nop") == 0) {
-        opc = C_NOP;
-    } else if (strcasecmp(token->text, "option") == 0) {
-        opc = C_OPTION;
-    } else if (strcasecmp(token->text, "reset") == 0) {
-        opc = C_RESET;
-    } else if (strcasecmp(token->text, "sleep") == 0) {
-        opc = C_SLEEP;
-    } else if (strcasecmp(token->text, "tris") == 0) {
-        opc = C_TRIS;
-        opd[0] = F;
-    } else {
-        fatal(1, "line %u: Invalid opcode", l);
+        oi = opcode_info[i];
+        ++token;
     }
+    insn->opc = oi->opc;
 
-    insn->opcode = opc;
-    ++token;
-
-    for (unsigned int i = 0; i < 2 && opd[i] != X; ++i) {
+    for (unsigned int i = 0; i < 2 && oi->opds[i] != N; ++i) {
         if (i == 1) {
             if (token->type != T_COMMA) {
-                if (opd[1] == D) {
+                if (oi->opds[1] == D) {
                     insn->d = 1;
                     break;
                 } else {
@@ -696,30 +575,31 @@ struct insn* parse_line(struct insn* const prev_insn,
             ++token;
         }
 
-        if (opd[i] == F) {
+        if (oi->opds[i] == F) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected register", l);
-            else if (token->number >= 1<<8)
+            else if (token->num >= 1<<8 ||
+                    (oi->opc == C_TRIS && (token->num < 5 || 7 < token->num)))
                 fatal(1, "line %u: Address out of range", l);
-            insn->f = token->number;
-        } else if (opd[i] == B) {
+            insn->f = token->num;
+        } else if (oi->opds[i] == B) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected bit number", l);
-            else if (token->number > 7)
+            else if (token->num > 7)
                 fatal(1, "line %u: Bit number out of range", l);
-            insn->b = token->number;
-        } else if (opd[i] == K) {
+            insn->b = token->num;
+        } else if (oi->opds[i] == K) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected constant", l);
-            else if (token->number >= 1<<kwidth)
+            else if (token->num >= 1<<oi->kwid)
                 fatal(1, "line %u: Literal out of range", l);
-            insn->k = token->number;
-        } else if (opd[i] == D) {
+            insn->k = token->num;
+        } else if (oi->opds[i] == D) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected destination select", l);
-            else if (token->number > 1)
+            else if (token->num > 1)
                 fatal(1, "line %u: Destination select out of range", l);
-            insn->d = token->number;
+            insn->d = token->num;
         }
 
         ++token;
@@ -728,17 +608,6 @@ struct insn* parse_line(struct insn* const prev_insn,
     if (token->type != T_NONE)
         fatal(1, "line %u: Trailing tokens", l);
 
-        /*
-         *if (token[1].type != T_NUMBER)
-         *    fatal(1, "line %u: Expected register", l);
-         *insn.f = token[1].number;
-         *if (token[2].type != T_COMMA)
-         *    fatal(1, "line %u: Expected comma", l);
-         *if (token[3].type != T_NUMBER)
-         *    fatal(1, "line %u: Expected number", l);
-         *insn.d = token[3].number;
-         */
-
     return insn;
 }
 
@@ -746,9 +615,9 @@ struct insn* parse_line(struct insn* const prev_insn,
 static
 uint16_t assemble_insn(const struct insn* insn)
 {
-    enum opcode opc = insn->opcode;
+    enum opcode opc = insn->opc;
 
-    uint16_t word = opcode_words[opc];
+    uint16_t word = opcode_info_list[opc].word;
 
     if (
             opc == C_ADDWF || opc == C_ADDWFC ||
@@ -792,6 +661,8 @@ bool assemble_16F1454(const int src)
 
     struct insn* insn = NULL;
 
+    init_opcode_dict();
+
     for (unsigned int l = 1; /* */; ++l) {
         v2("Lexing line");
         struct token tokens[16];
@@ -802,7 +673,7 @@ bool assemble_16F1454(const int src)
         if (buflen == 0)
             break;
         insn = parse_line(insn, tokens, l);
-        printf("0x%"PRIX16"\n", assemble_insn(insn));
+        printf("0x%04"PRIX16"\n", assemble_insn(insn));
     }
 
     return false;
