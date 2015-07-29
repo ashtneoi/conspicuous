@@ -727,8 +727,14 @@ void dump_hex(struct insn* start, const int out)
         label_addrs[h].addr = addr;
     }
 
+    int bank = -1;
     for (insn = start, addr = 0; insn != NULL; insn = insn->next, ++addr) {
+        if (insn->label != NULL)
+            bank = -1;
+        else if (insn->opc == C_MOVLB)
+            bank = insn->k;
         printf("0x%04"PRIX16"\n", assemble_insn(insn, addr));
+        printf("  bank = %d\n", bank);
     }
 
     /*while (true) {*/
