@@ -727,7 +727,7 @@ void dump_hex(struct insn* start, const int out)
         label_addrs[h].addr = addr;
     }
 
-    int bank = -1;
+    int bank = 0;
     for (insn = start, addr = 0; insn != NULL; insn = insn->next, ++addr) {
         if (insn->label != NULL)
             bank = -1;
