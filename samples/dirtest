@@ -1,0 +1,3 @@
+        .reg qwer, 0x4F2
+        ;.reg asdf
+        ;.sreg zxcv

@@ -191,4 +191,3 @@ tris 7
 
 .bra 0x1FF
 .call 0x7FF
-.goto 0x7FF
