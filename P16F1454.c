@@ -14,8 +14,9 @@
 
 #define CHUNK_LEN 32
 #define BUFCAP (CHUNK_LEN * 2)
-#define OPCODE_DICT_CAP 256
-#define LABEL_ADDR_DICT_CAP 1024
+#define OPCODE_INFO_CAP 256
+#define LABEL_INFO_CAP 1024
+#define REG_INFO_CAP 1024
 
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #define max(x, y) ((x) > (y) ? (x) : (y))
@@ -284,13 +285,46 @@ struct opcode_info opcode_info_list[] = {
 };
 
 
-struct opcode_info* opcode_info[2 * OPCODE_DICT_CAP];
+struct opcode_info* opcode_info[2 * OPCODE_INFO_CAP];
 
 
 struct reg_info {
     const char* name;
     unsigned int bank;
     unsigned int addr;
+} reg_info[2 * REG_INFO_CAP];
+
+
+struct label_info {
+    const char* label;
+    unsigned int addr;
+} label_info[2 * LABEL_INFO_CAP];
+
+
+union line {
+    struct {
+        struct opcode_info* oi;
+        union line* next;
+
+        const char* label;
+        unsigned int f; // register file address
+        char* f_name;
+        unsigned int b; // bit number
+        char* b_str;
+        int k; // literal
+        const char* k_lbl;
+        unsigned int d; // destination select (0 = W, 1 = f)
+        //unsigned int n; // FSR or INDF number
+        //unsigned int mm; // pre-/post-decrement/-increment select
+    } i;
+    struct {
+        struct opcode_info* oi;
+        union line* next;
+
+        const char* name;
+        int addr1;
+        int addr2;
+    } d;
 };
 
 
@@ -308,13 +342,13 @@ static unsigned long hash(const char* str)
 
 
 static
-void init_opcode_dict()
+void opcode_info_init()
 {
     for (unsigned int i = 0; i < lengthof(opcode_info); ++i)
         opcode_info[i] = NULL;
 
     for (unsigned int i = 0; i < lengthof(opcode_info_list); ++i) {
-        unsigned int h = hash(opcode_info_list[i].str) % OPCODE_DICT_CAP;
+        unsigned int h = hash(opcode_info_list[i].str) % OPCODE_INFO_CAP;
         while (opcode_info[h] != NULL)
             ++h;
         opcode_info[h] = &opcode_info_list[i];
@@ -322,37 +356,57 @@ void init_opcode_dict()
 }
 
 
-struct label_addr {
-    char* label;
-    unsigned int addr;
-} label_addrs[2 * LABEL_ADDR_DICT_CAP];
+static
+struct opcode_info* opcode_info_get(const char* const opcode)
+{
+    unsigned int h = hash(opcode) % OPCODE_INFO_CAP;
+    while (true) {
+        if (h >= lengthof(opcode_info) || opcode_info[h] == NULL)
+            return NULL;
+        if (strcmp(opcode, opcode_info[h]->str) == 0)
+            break;
+        ++h;
+    }
+
+    return opcode_info[h];
+}
 
 
-union line {
-    struct {
-        enum opcode opc;
-        union line* next;
+static
+void label_info_init()
+{
+    for (unsigned int i = 0; i < lengthof(label_info); ++i)
+        label_info[i].label = NULL;
+}
 
-        char* label;
-        unsigned int f; // register file address
-        char* f_name;
-        unsigned int b; // bit number
-        char* b_str;
-        int k; // literal
-        char* k_lbl;
-        unsigned int d; // destination select (0 = W, 1 = f)
-        //unsigned int n; // FSR or INDF number
-        //unsigned int mm; // pre-/post-decrement/-increment select
-    } i;
-    struct {
-        enum opcode opc;
-        union line* next;
 
-        char* name;
-        uint16_t addr1;
-        uint16_t addr2;
-    } d;
-};
+static
+struct label_info* label_info_avail(const char* const label)
+{
+    unsigned int h = hash(label) % LABEL_INFO_CAP;
+    while (label_info[h].label != NULL) {
+        ++h;
+        if (h >= lengthof(label_info))
+            fatal(1, "Label dict is full");
+    }
+    return &label_info[h];
+}
+
+
+static
+struct label_info* label_info_get(const char* const label)
+{
+    unsigned int h = hash(label) % LABEL_INFO_CAP;
+    while (true) {
+        if (h >= lengthof(label_info) || label_info[h].label == NULL)
+            fatal(1, "Label %s is not defined", label);
+        if (strcmp(label_info[h].label, label) == 0)
+            break;
+        ++h;
+    }
+
+    return &label_info[h];
+}
 
 
 static inline
@@ -584,11 +638,12 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
 }
 
 
+static
 union line* parse_line(union line* const prev_line,
         const struct token* token, unsigned int l)
 {
     if (token[0].type == T_NONE)
-        return NULL;
+        return prev_line;
 
     union line* line = malloc(sizeof(union line));
     if (prev_line != NULL)
@@ -598,6 +653,7 @@ union line* parse_line(union line* const prev_line,
         fatal(1, "line %u: Expected label or opcode", l);
 
     if (token[1].type == T_COLON) {
+        printf("setting label = %s\n", token->text);
         line->i.label = token->text;
         token += 2;
         if (token->type == T_NONE)
@@ -608,30 +664,20 @@ union line* parse_line(union line* const prev_line,
         line->i.label = NULL;
     }
 
-    struct opcode_info* oi;
-    {
-        unsigned int h = hash(token->text) % OPCODE_DICT_CAP;
-        while (true) {
-            if (h >= lengthof(opcode_info) || opcode_info[h] == NULL)
-                fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
-            if (strcmp(token->text, opcode_info[h]->str) == 0)
-                break;
-            ++h;
-        }
+    struct opcode_info* oi = opcode_info_get(token->text);
+    if (oi == NULL)
+        fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
+    ++token;
 
-        oi = opcode_info[h];
-        ++token;
-    }
-    line->i.opc = oi->opc;
+    line->i.oi = oi;
 
-    // Handle directives.
     if (oi->opc == CD_REG) {
         if (token->type != T_TEXT)
             fatal(1, "line %u: Expected register name", l);
         line->d.name = token->text;
         ++token;
         if (token->type == T_NONE)
-            fatal(1, "NOT IMPLEMENTED");
+            line->d.addr1 = -1;
         else if (token->type != T_COMMA)
             fatal(1, "line %u: Expected comma or end of line", l);
         ++token;
@@ -643,7 +689,7 @@ union line* parse_line(union line* const prev_line,
         if (token->type != T_TEXT)
             fatal(1, "line %u: Expected register name", l);
         line->d.name = token->text;
-        fatal(1, "NOT IMPLEMENTED");
+        line->d.addr1 = -1;
     } else for (unsigned int i = 0; i < 2 && oi->opds[i] != N; ++i) {
         if (i == 1) {
             if (token->type != T_COMMA) {
@@ -722,34 +768,143 @@ union line* parse_line(union line* const prev_line,
 }
 
 
-// most directives
+// directives
+static
 union line* resolve_pass1(union line* start)
 {
+    for (unsigned int i = 0; i < lengthof(reg_info); ++i)
+        reg_info[i].name = NULL;
+
+    union line* prev = NULL;
+
+    for (union line* line = start; line != NULL; line = line->d.next) {
+        if (line->d.oi->opc == CD_REG) {
+            if (line->d.addr1 == -1)
+                fatal(1, "NOT IMPLEMENTED"); // TODO
+            unsigned int h = hash(line->d.name) % REG_INFO_CAP;
+            while (reg_info[h].name != NULL) {
+                ++h;
+                if (h >= lengthof(reg_info))
+                    fatal(1, "Register dict is full");
+            }
+            reg_info[h].name = line->d.name;
+            reg_info[h].bank = line->d.addr1 >> 7;
+            reg_info[h].addr = line->d.addr1 % (1<<7);
+
+        } else if (line->d.oi->opc == CD_SREG) {
+            fatal(1, "NOT IMPLEMENTED"); // TODO
+        } else {
+            continue;
+        }
+
+        if (prev == NULL)
+            start = line->d.next;
+        else
+            prev->d.next = line->d.next;
+        prev = line;
+    }
+
     return start;
 }
 
 
 // *F, .*F, .BRA?
+static
 union line* resolve_pass2(union line* start)
 {
-    return start;
+    struct opcode_info* const oi_movlb = opcode_info_get("movlb");
+    struct opcode_info* const oid_goto = opcode_info_get(".goto");
+
+    label_info_init();
+
+    union line* line = start;
+    union line* prev = NULL;
+
+    unsigned int addr = 0;
+
+    while (line != NULL) {
+        union line* next = line->i.next;
+        line->i.next = prev;
+
+        if (line->i.label != NULL) {
+            struct label_info* li = label_info_avail(line->i.label);
+            li->label = line->i.label;
+            li->addr = addr;
+        }
+
+        enum opcode opc = line->i.oi->opc;
+
+        if ((C_ADDWF <= opc && opc <= C_BTFSS && opc != C_CLRW) ||
+                (CD_ADDWF <= opc && opc <= CD_BTFSS)) {
+            ++addr;
+
+            bool smart = (CD_ADDWF <= opc && opc <= CD_BTFSS);
+
+            if (line->i.f_name != NULL) {
+                unsigned int h = hash(line->i.f_name) % REG_INFO_CAP;
+                while (true) {
+                    if (h >= lengthof(reg_info) || reg_info[h].name == NULL)
+                        fatal(1, "Register %s is not defined", line->i.f_name);
+                    if (strcmp(reg_info[h].name, line->i.f_name) == 0)
+                        break;
+                    ++h;
+                }
+
+                line->i.f = reg_info[h].addr;
+                free(line->i.f_name); // possibly harmful
+                line->i.f_name = NULL; // possibly unnecessary
+
+                if (smart) {
+                    union line* inter_line = malloc(sizeof(union line));
+                    inter_line->i.next = prev;
+                    inter_line->i.oi = oi_movlb;
+                    inter_line->i.k = reg_info[h].bank;
+                    inter_line->i.k_lbl = NULL;
+
+                    line->i.next = inter_line;
+                }
+            }
+        } else if (opc == CD_BRA) {
+            struct label_info* li = label_info_get(line->i.k_lbl);
+            if (li == NULL) {
+                // Can't tell how far yet. Assume worst case (MOVLP, GOTO).
+                addr += 2;
+            } else {
+                line->i.k = li->addr - addr + 1;
+                if (-256 <= line->i.k && line->i.k <= 255) {
+                    ++addr;
+                } else {
+                    addr += 2;
+                    line->i.oi = oid_goto;
+                }
+            }
+        } else {
+            ++addr;
+        }
+
+        prev = line;
+        line = next;
+    }
+
+    return prev;
 }
 
 
 // .BRA?, labels
-union line* resolve_pass3(union line* start)
+static
+union line* resolve_pass3(union line* start, unsigned int* addr_offset)
 {
+    (void)addr_offset;
+
     unsigned int addr = 0;
     for (union line* line = start; line != NULL; line = line->i.next,
             ++addr) {
         if (line->i.label == NULL)
             continue;
         printf("label %s = %d\n", line->i.label, addr);
-        unsigned int h = hash(line->i.label) % LABEL_ADDR_DICT_CAP;
-        while (label_addrs[h].label != NULL && h < lengthof(label_addrs))
-            ++h;
-        label_addrs[h].label = line->i.label;
-        label_addrs[h].addr = addr;
+        struct label_info* li = label_info_avail(line->i.label);
+        li->label = line->i.label;
+        li->addr = addr;
     }
 
     return start;
@@ -757,8 +912,10 @@ union line* resolve_pass3(union line* start)
 
 
 // .BRA, .CALL, .GOTO
-union line* resolve_pass4(union line* start)
+static
+union line* resolve_pass4(union line* start, unsigned int addr_offset)
 {
+    (void)addr_offset;
     return start;
 }
 
@@ -768,9 +925,9 @@ uint16_t assemble_line(union line* line, unsigned int addr)
 {
     (void)addr;
 
-    enum opcode opc = line->i.opc;
+    enum opcode opc = line->i.oi->opc;
 
-    uint16_t word = opcode_info_list[opc].word;
+    uint16_t word = line->i.oi->word;
 
     if (
             opc == C_ADDWF || opc == C_ADDWFC ||
@@ -798,16 +955,16 @@ uint16_t assemble_line(union line* line, unsigned int addr)
             opc == C_BRA || opc == C_CALL ||
             opc == C_GOTO || opc == C_RETLW) {
         if (line->i.k_lbl != NULL) {
-            unsigned int h = hash(line->i.k_lbl) % LABEL_ADDR_DICT_CAP;
-            while (strcmp(label_addrs[h].label, line->i.k_lbl) != 0
-                    && h < lengthof(label_addrs))
-                ++h;
-            if (h >= lengthof(label_addrs))
-                fatal(1, "Label address dict is full");
-            line->i.k = label_addrs[h].addr;
+            fatal(1, "NOT IMPLEMENTED");
+            //line->i.k = label_info[h].addr;
         }
 
-        word |= line->i.k;
+        // To be portable, we can't assume this machine uses a two's complement
+        // representation.
+        if (line->i.k >= 0)
+            word |= line->i.k;
+        else
+            word |= (1 << line->i.oi->kwid) + line->i.k;
     } else if (opc == C_TRIS) {
         word |= line->i.f;
     }
@@ -820,26 +977,25 @@ void dump_hex(union line* start, const int out)
 {
     (void)out;
 
-    for (unsigned int i = 0; i < lengthof(label_addrs); ++i)
-        label_addrs[i].label = NULL;
+    for (unsigned int i = 0; i < lengthof(label_info); ++i)
+        label_info[i].label = NULL;
 
-    unsigned int addr;
-    union line* line;
-
+    unsigned int addr_offset = 0;
     start = resolve_pass1(start);
     start = resolve_pass2(start);
-    start = resolve_pass3(start);
-    start = resolve_pass4(start);
+    start = resolve_pass3(start, &addr_offset);
+    start = resolve_pass4(start, addr_offset);
 
-    int bank = 0;
-    for (line = start, addr = 0; line != NULL; line = line->i.next, ++addr) {
-        if (line->i.label != NULL)
-            bank = -1;
-        else if (line->i.opc == C_MOVLB)
-            bank = line->i.k;
-        printf("0x%04"PRIX16"\n", assemble_line(line, addr));
-        printf("  bank = %d\n", bank);
-    }
+    //int bank = 0;
+    //for (union line line = start, addr = 0; line != NULL; line = line->i.next,
+            //++addr) {
+        //if (line->i.label != NULL)
+            //bank = -1;
+        //else if (line->i.oi->opc == C_MOVLB)
+            //bank = line->i.k;
+        //printf("0x%04"PRIX16"\n", assemble_line(line, addr));
+        //printf("  bank = %d\n", bank);
+    //}
 
     /*while (true) {*/
         /*char data[16 * 2];*/
@@ -861,7 +1017,7 @@ bool assemble_16F1454(const int src)
     union line* start = NULL;
     union line* prev_line = NULL;
 
-    init_opcode_dict();
+    opcode_info_init();
 
     for (unsigned int l = 1; /* */; ++l) {
         v2("Lexing line");
@@ -873,11 +1029,9 @@ bool assemble_16F1454(const int src)
         if (buflen == 0)
             break;
         union line* line = parse_line(prev_line, tokens, l);
-        if (line != NULL) {
-            if (start == NULL)
-                start = line;
-            prev_line = line;
-        }
+        if (start == NULL && line != NULL)
+            start = line;
+        prev_line = line;
     }
 
     dump_hex(start, 0);

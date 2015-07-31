@@ -1,0 +1,11 @@
+        movlw 0xEA
+
+        movwf 0x7F
+
+        movlb 0x01
+        movwf 0x7F
+
+aaa:    movwf 0x7F
+
+        movlb 0x02
+        movwf 0x7F

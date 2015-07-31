@@ -11,7 +11,7 @@ OBJ := $(SRC:%.c=%.o)
 EXE := $(EXE_SRC:%.c=%)
 
 CC := gcc
-CFLAGS := -std=c99 -g -Wall -Wextra -Werror
+CFLAGS := -std=c99 -g -Wall -Wextra -Werror -Wno-unused-function
 
 
 all: $(EXE) $(EXTRA_EXE)

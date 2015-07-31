@@ -1,0 +1,7 @@
+start:      movlw 0xAE
+            movwf 0xFF
+            incf 0xFF
+loop:       btfsc 0xFF, 7
+            goto done
+            goto loop
+done:

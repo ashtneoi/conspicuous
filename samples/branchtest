@@ -1,0 +1,3 @@
+p:      goto x
+x:      goto x
+q:      goto x
