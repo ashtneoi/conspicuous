@@ -652,9 +652,10 @@ union line* parse_line(union line* const prev_line,
     if (token->type != T_TEXT)
         fatal(1, "line %u: Expected label or opcode", l);
 
+    v2("Setting label");
     if (token[1].type == T_COLON) {
-        printf("setting label = %s\n", token->text);
         line->i.label = token->text;
+        printf("label = %p\n", line->i.label);
         token += 2;
         if (token->type == T_NONE)
             return line;
@@ -662,6 +663,7 @@ union line* parse_line(union line* const prev_line,
             fatal(1, "line %u: Expected opcode", l);
     } else {
         line->i.label = NULL;
+        print("label = NULL\n");
     }
 
     struct opcode_info* oi = opcode_info_get(token->text);
@@ -669,6 +671,7 @@ union line* parse_line(union line* const prev_line,
         fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
     ++token;
 
+    line->i.next = NULL;
     line->i.oi = oi;
 
     if (oi->opc == CD_REG) {
@@ -899,7 +902,8 @@ union line* resolve_pass3(union line* start, unsigned int* addr_offset)
     unsigned int addr = 0;
     for (union line* line = start; line != NULL; line = line->i.next,
             ++addr) {
-        if (line->i.label == NULL)
+        /*printf("%p\n", line->i.label);*/
+        if (line->i.oi->opc >= CD_ADDWF || line->i.label == NULL)
             continue;
         printf("label %s = %d\n", line->i.label, addr);
         struct label_info* li = label_info_avail(line->i.label);
