@@ -159,9 +159,10 @@ enum opcode {
 enum operand {
     N, // none
     F, // register address (0x0..0x7F)
-    FD, // register address (0x0..0xFFF) or name
+    FN, // register name
     B, // bit number (0..7)
     K, // miscellaneous constant
+    KL, // label name
     D, // destination select (0,1)
     T, // TRIS operand (5..7)
 
@@ -246,38 +247,38 @@ struct opcode_info opcode_info_list[] = {
     { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {N, N} },
     { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, N} },
 
-    { .opc = CD_ADDWF, .str = ".addwf", .word = 0x0700, .opds = {FD, D} },
-    { .opc = CD_ADDWFC, .str = ".addwfc", .word = 0x3D00, .opds = {FD, D} },
-    { .opc = CD_ANDWF, .str = ".andwf", .word = 0x0500, .opds = {FD, D} },
-    { .opc = CD_ASRF, .str = ".asrf", .word = 0x3700, .opds = {FD, D} },
-    { .opc = CD_LSLF, .str = ".lslf", .word = 0x3500, .opds = {FD, D} },
-    { .opc = CD_LSRF, .str = ".lsrf", .word = 0x3600, .opds = {FD, D} },
-    { .opc = CD_CLRF, .str = ".clrf", .word = 0x0180, .opds = {FD, N} },
-    { .opc = CD_COMF, .str = ".comf", .word = 0x0900, .opds = {FD, D} },
-    { .opc = CD_DECF, .str = ".decf", .word = 0x300, .opds = {FD, D} },
-    { .opc = CD_INCF, .str = ".incf", .word = 0x0A00, .opds = {FD, D} },
-    { .opc = CD_IORWF, .str = ".iorwf", .word = 0x0400, .opds = {FD, D} },
-    { .opc = CD_MOVF, .str = ".movf", .word = 0x0800, .opds = {FD, D} },
-    { .opc = CD_MOVWF, .str = ".movwf", .word = 0x0080, .opds = {FD, N} },
-    { .opc = CD_RLF, .str = ".rlf", .word = 0x0D00, .opds = {FD, D} },
-    { .opc = CD_RRF, .str = ".rrf", .word = 0x0C00, .opds = {FD, D} },
-    { .opc = CD_SUBWF, .str = ".subwf", .word = 0x0200, .opds = {FD, D} },
-    { .opc = CD_SUBWFB, .str = ".subwfb", .word = 0x3B00, .opds = {FD, D} },
-    { .opc = CD_SWAPF, .str = ".swapf", .word = 0x0E00, .opds = {FD, D} },
-    { .opc = CD_XORWF, .str = ".xorwf", .word = 0x0600, .opds = {FD, D} },
+    { .opc = CD_ADDWF, .str = ".addwf", .word = 0x0700, .opds = {FN, D} },
+    { .opc = CD_ADDWFC, .str = ".addwfc", .word = 0x3D00, .opds = {FN, D} },
+    { .opc = CD_ANDWF, .str = ".andwf", .word = 0x0500, .opds = {FN, D} },
+    { .opc = CD_ASRF, .str = ".asrf", .word = 0x3700, .opds = {FN, D} },
+    { .opc = CD_LSLF, .str = ".lslf", .word = 0x3500, .opds = {FN, D} },
+    { .opc = CD_LSRF, .str = ".lsrf", .word = 0x3600, .opds = {FN, D} },
+    { .opc = CD_CLRF, .str = ".clrf", .word = 0x0180, .opds = {FN, N} },
+    { .opc = CD_COMF, .str = ".comf", .word = 0x0900, .opds = {FN, D} },
+    { .opc = CD_DECF, .str = ".decf", .word = 0x300, .opds = {FN, D} },
+    { .opc = CD_INCF, .str = ".incf", .word = 0x0A00, .opds = {FN, D} },
+    { .opc = CD_IORWF, .str = ".iorwf", .word = 0x0400, .opds = {FN, D} },
+    { .opc = CD_MOVF, .str = ".movf", .word = 0x0800, .opds = {FN, D} },
+    { .opc = CD_MOVWF, .str = ".movwf", .word = 0x0080, .opds = {FN, N} },
+    { .opc = CD_RLF, .str = ".rlf", .word = 0x0D00, .opds = {FN, D} },
+    { .opc = CD_RRF, .str = ".rrf", .word = 0x0C00, .opds = {FN, D} },
+    { .opc = CD_SUBWF, .str = ".subwf", .word = 0x0200, .opds = {FN, D} },
+    { .opc = CD_SUBWFB, .str = ".subwfb", .word = 0x3B00, .opds = {FN, D} },
+    { .opc = CD_SWAPF, .str = ".swapf", .word = 0x0E00, .opds = {FN, D} },
+    { .opc = CD_XORWF, .str = ".xorwf", .word = 0x0600, .opds = {FN, D} },
 
-    { .opc = CD_DECFSZ, .str = ".decfsz", .word = 0x0C00, .opds = {FD, D} },
-    { .opc = CD_INCFSZ, .str = ".incfsz", .word = 0x0F00, .opds = {FD, D} },
+    { .opc = CD_DECFSZ, .str = ".decfsz", .word = 0x0C00, .opds = {FN, D} },
+    { .opc = CD_INCFSZ, .str = ".incfsz", .word = 0x0F00, .opds = {FN, D} },
 
-    { .opc = CD_BCF, .str = ".bcf", .word = 0x1000, .opds = {FD, B} },
-    { .opc = CD_BSF, .str = ".bsf", .word = 0x1400, .opds = {FD, B} },
+    { .opc = CD_BCF, .str = ".bcf", .word = 0x1000, .opds = {FN, B} },
+    { .opc = CD_BSF, .str = ".bsf", .word = 0x1400, .opds = {FN, B} },
 
-    { .opc = CD_BTFSC, .str = ".btfsc", .word = 0x1800, .opds = {FD, B} },
-    { .opc = CD_BTFSS, .str = ".btfss", .word = 0x1C00, .opds = {FD, B} },
+    { .opc = CD_BTFSC, .str = ".btfsc", .word = 0x1800, .opds = {FN, B} },
+    { .opc = CD_BTFSS, .str = ".btfss", .word = 0x1C00, .opds = {FN, B} },
 
-    { .opc = CD_BRA, .str = ".bra", .word = 0x3200, .opds = {K, N},
+    { .opc = CD_BRA, .str = ".bra", .word = 0x3200, .opds = {KL, N},
         .kwid = 9 },
-    { .opc = CD_CALL, .str = ".call", .word = 0x2000, .opds = {K, N},
+    { .opc = CD_CALL, .str = ".call", .word = 0x2000, .opds = {KL, N},
         .kwid = 11 },
 
     { .opc = CD_REG, .str = ".reg"},
@@ -296,7 +297,7 @@ struct reg_info {
 
 
 struct label_info {
-    const char* label;
+    const char* name;
     unsigned int addr;
 } label_info[2 * LABEL_INFO_CAP];
 
@@ -328,8 +329,57 @@ union line {
 };
 
 
+void print_line(union line* line)
+{
+    if (line->i.oi->opc == C_NONE)
+        return;
+
+    struct opcode_info* oi = line->i.oi;
+
+    if (C_ADDWF <= oi->opc && oi->opc <= CD_CALL) {
+        if (line->i.label != NULL)
+            printf("%s: ", line->i.label);
+        print(oi->str);
+        for (unsigned int i = 0; i < 2; ++i) {
+            if (i == 0 && oi->opds[0] != N)
+                putchar(' ');
+            else if (i == 1 && oi->opds[1] != N)
+                print(", ");
+
+            switch (oi->opds[i]) {
+                case N:
+                    return;
+                case F:
+                    printf("0x%02X", line->i.f);
+                    break;
+                case FN:
+                    print(line->i.f_name);
+                    break;
+                case B:
+                    printf("%d", line->i.b);
+                    break;
+                case K:
+                    printf("0x%02X", line->i.k);
+                    break;
+                case KL:
+                    print(line->i.k_lbl);
+                    break;
+                case D:
+                    putchar(line->i.d + '0');
+                    break;
+                case T:
+                    fatal(2, "Not implemented");
+            }
+        }
+    } else {
+        fatal(2, "Not implemented");
+    }
+}
+
+
 // djb2 by Dan Bernstein
-static unsigned long hash(const char* str)
+static
+unsigned long hash(const char* str)
 {
     unsigned long hash = 5381;
     int c;
@@ -376,7 +426,7 @@ static
 void label_info_init()
 {
     for (unsigned int i = 0; i < lengthof(label_info); ++i)
-        label_info[i].label = NULL;
+        label_info[i].name = NULL;
 }
 
 
@@ -384,7 +434,7 @@ static
 struct label_info* label_info_avail(const char* const label)
 {
     unsigned int h = hash(label) % LABEL_INFO_CAP;
-    while (label_info[h].label != NULL) {
+    while (label_info[h].name != NULL) {
         ++h;
         if (h >= lengthof(label_info))
             fatal(1, "Label dict is full");
@@ -394,13 +444,13 @@ struct label_info* label_info_avail(const char* const label)
 
 
 static
-struct label_info* label_info_get(const char* const label)
+struct label_info* label_info_get(const char* const name)
 {
-    unsigned int h = hash(label) % LABEL_INFO_CAP;
+    unsigned int h = hash(name) % LABEL_INFO_CAP;
     while (true) {
-        if (h >= lengthof(label_info) || label_info[h].label == NULL)
-            fatal(1, "Label %s is not defined", label);
-        if (strcmp(label_info[h].label, label) == 0)
+        if (h >= lengthof(label_info) || label_info[h].name == NULL)
+            return NULL;
+        if (strcmp(label_info[h].name, name) == 0)
             break;
         ++h;
     }
@@ -640,38 +690,41 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
 
 static
 union line* parse_line(union line* const prev_line,
-        const struct token* token, unsigned int l)
+        const struct token* token, unsigned int l, char** const label)
 {
     if (token[0].type == T_NONE)
         return prev_line;
-
-    union line* line = malloc(sizeof(union line));
-    if (prev_line != NULL)
-        prev_line->i.next = line;
 
     if (token->type != T_TEXT)
         fatal(1, "line %u: Expected label or opcode", l);
 
     v2("Setting label");
     if (token[1].type == T_COLON) {
-        line->i.label = token->text;
-        printf("label = %p\n", line->i.label);
+        if (*label != NULL)
+            fatal(1, "line %u: Instruction already has a label", l);
+        *label = token->text;
         token += 2;
-        if (token->type == T_NONE)
-            return line;
-        else if (token->type != T_TEXT)
+        if (token->type == T_NONE) {
+            v2("Carrying label to next line");
+            return prev_line;
+        } else if (token->type != T_TEXT) {
             fatal(1, "line %u: Expected opcode", l);
-    } else {
-        line->i.label = NULL;
-        print("label = NULL\n");
+        }
     }
+
+    union line* line = malloc(sizeof(union line));
+    line->i.next = NULL;
+    if (prev_line != NULL)
+        prev_line->i.next = line;
+
+    line->i.label = *label;
+    *label = NULL;
 
     struct opcode_info* oi = opcode_info_get(token->text);
     if (oi == NULL)
         fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
     ++token;
 
-    line->i.next = NULL;
     line->i.oi = oi;
 
     if (oi->opc == CD_REG) {
@@ -707,31 +760,17 @@ union line* parse_line(union line* const prev_line,
         }
 
         if (oi->opds[i] == F) {
-            if (token->type == T_NUMBER) {
-                if (token->num > 0x7F)
-                    fatal(1, "line %u: Address 0x%"PRIX16" out of range", l,
-                        token->num);
-                line->i.f = token->num;
-                line->i.f_name = NULL;
-            } else if (token->type == T_TEXT) {
-                line->i.f_name = token->text;
-            } else {
-                fatal(1, "line %u: Expected register address or register name",
-                    l);
-            }
-        } else if (oi->opds[i] == FD) {
-            if (token->type == T_NUMBER) {
-                if (token->num > 0xFFF)
-                    fatal(1, "line %u: Address 0x%"PRIX16" out of range", l,
-                        token->num);
-                line->i.f = token->num;
-                line->i.f_name = NULL;
-            } else if (token->type == T_TEXT) {
-                line->i.f_name = token->text;
-            } else {
-                fatal(1, "line %u: Expected register address or register name",
-                    l);
-            }
+            if (token->type != T_NUMBER)
+                fatal(1, "line %u: Expected register address", l);
+            else if (token->num > 0x7F)
+                fatal(1, "line %u: Address 0x%"PRIX16" out of range", l,
+                    token->num);
+            line->i.f = token->num;
+            line->i.f_name = NULL;
+        } else if (oi->opds[i] == FN) {
+            if (token->type != T_TEXT)
+                fatal(1, "line %u: Expected register name", l);
+            line->i.f_name = token->text;
         } else if (oi->opds[i] == B) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected bit number", l);
@@ -739,16 +778,16 @@ union line* parse_line(union line* const prev_line,
                 fatal(1, "line %u: Bit number out of range", l);
             line->i.b = token->num;
         } else if (oi->opds[i] == K) {
-            if (token->type == T_NUMBER) {
-                if (token->num >= 1<<oi->kwid)
-                    fatal(1, "line %u: Literal out of range", l);
-                line->i.k = token->num;
-                line->i.k_lbl = NULL;
-            } else if (token->type == T_TEXT) {
-                line->i.k_lbl = token->text;
-            } else {
-                fatal(1, "line %u: Expected constant or label", l);
-            }
+            if (token->type != T_NUMBER)
+                fatal(1, "line %u: Expected constant", l);
+            else if (token->num >= 1<<oi->kwid)
+                fatal(1, "line %u: Literal out of range", l);
+            line->i.k = token->num;
+            line->i.k_lbl = NULL;
+        } else if (oi->opds[i] == KL) {
+            if (token->type != T_TEXT)
+                fatal(1, "line %u: Expected label", l);
+            line->i.k_lbl = token->text;
         } else if (oi->opds[i] == D) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected destination select", l);
@@ -766,6 +805,9 @@ union line* parse_line(union line* const prev_line,
 
     if (token->type != T_NONE)
         fatal(1, "line %u: Trailing tokens", l);
+
+    print_line(line);
+    putchar('\n');
 
     return line;
 }
@@ -831,7 +873,7 @@ union line* resolve_pass2(union line* start)
 
         if (line->i.label != NULL) {
             struct label_info* li = label_info_avail(line->i.label);
-            li->label = line->i.label;
+            li->name = line->i.label;
             li->addr = addr;
         }
 
@@ -903,11 +945,14 @@ union line* resolve_pass3(union line* start, unsigned int* addr_offset)
     for (union line* line = start; line != NULL; line = line->i.next,
             ++addr) {
         /*printf("%p\n", line->i.label);*/
-        if (line->i.oi->opc >= CD_ADDWF || line->i.label == NULL)
+        /*if (line->i.label != NULL)*/
+            /*printf("%s\n", line->i.label);*/
+        if ((CD_ADDWF <= line->i.oi->opc && line->i.oi->opc <= CD_CALL)||
+                line->i.label == NULL)
             continue;
         printf("label %s = %d\n", line->i.label, addr);
         struct label_info* li = label_info_avail(line->i.label);
-        li->label = line->i.label;
+        li->name = line->i.label;
         li->addr = addr;
     }
 
@@ -981,8 +1026,7 @@ void dump_hex(union line* start, const int out)
 {
     (void)out;
 
-    for (unsigned int i = 0; i < lengthof(label_info); ++i)
-        label_info[i].label = NULL;
+    label_info_init();
 
     unsigned int addr_offset = 0;
     start = resolve_pass1(start);
@@ -1023,16 +1067,18 @@ bool assemble_16F1454(const int src)
 
     opcode_info_init();
 
+    char* label = NULL;
     for (unsigned int l = 1; /* */; ++l) {
         v2("Lexing line");
         struct token tokens[16];
         lex_line(tokens, src, &bufpos, &buflen);
-        for (unsigned int i = 0; i < lengthof(tokens) &&
-                tokens[i].type != T_NONE; ++i)
-            print_token(&tokens[i]);
+        if (verbosity >= 2)
+            for (unsigned int i = 0; i < lengthof(tokens) &&
+                    tokens[i].type != T_NONE; ++i)
+                print_token(&tokens[i]);
         if (buflen == 0)
             break;
-        union line* line = parse_line(prev_line, tokens, l);
+        union line* line = parse_line(prev_line, tokens, l, &label);
         if (start == NULL && line != NULL)
             start = line;
         prev_line = line;

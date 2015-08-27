@@ -1,4 +1,3 @@
         .reg qwer, 0x4F2
-        ;.reg asdf
-        ;.sreg zxcv
+        movlw 0x91
         .movwf qwer
