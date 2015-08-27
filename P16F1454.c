@@ -149,6 +149,8 @@ enum opcode {
     CD_BRA,
     CD_CALL,
 
+    CS_GOTO,
+
     CD_REG,
     CD_SREG,
 
@@ -281,6 +283,9 @@ struct opcode_info opcode_info_list[] = {
     { .opc = CD_CALL, .str = ".call", .word = 0x2000, .opds = {KL, N},
         .kwid = 11 },
 
+    { .opc = CS_GOTO, .str = "$goto$", .word = 0x2800, .opds = {K, N},
+        .kwid = 11 },
+
     { .opc = CD_REG, .str = ".reg"},
     { .opc = CD_SREG, .str = ".sreg"},
 };
@@ -336,7 +341,7 @@ void print_line(union line* line)
 
     struct opcode_info* oi = line->i.oi;
 
-    if (C_ADDWF <= oi->opc && oi->opc <= CD_CALL) {
+    if (C_ADDWF <= oi->opc && oi->opc <= CS_GOTO) {
         if (line->i.label != NULL)
             printf("%s: ", line->i.label);
         print(oi->str);
@@ -947,7 +952,7 @@ union line* resolve_pass3(union line* start, unsigned int* addr_offset)
         /*printf("%p\n", line->i.label);*/
         /*if (line->i.label != NULL)*/
             /*printf("%s\n", line->i.label);*/
-        if ((CD_ADDWF <= line->i.oi->opc && line->i.oi->opc <= CD_CALL)||
+        if ((CD_REG <= line->i.oi->opc && line->i.oi->opc <= CD_SREG) ||
                 line->i.label == NULL)
             continue;
         printf("label %s = %d\n", line->i.label, addr);
