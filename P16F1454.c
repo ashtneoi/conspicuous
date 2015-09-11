@@ -811,9 +811,6 @@ union line* parse_line(union line* const prev_line,
     if (token->type != T_NONE)
         fatal(1, "line %u: Trailing tokens", l);
 
-    print_line(line);
-    putchar('\n');
-
     return line;
 }
 
@@ -1034,9 +1031,37 @@ void dump_hex(union line* start, const int out)
     label_info_init();
 
     unsigned int addr_offset = 0;
+
+    for (union line* line = start; line != NULL; line = line->i.next) {
+        print_line(line);
+        putchar('\n');
+    }
+    putchar('\n');
+
     start = resolve_pass1(start);
+
+    for (union line* line = start; line != NULL; line = line->i.next) {
+        print_line(line);
+        putchar('\n');
+    }
+    putchar('\n');
+
     start = resolve_pass2(start);
+
+    for (union line* line = start; line != NULL; line = line->i.next) {
+        print_line(line);
+        putchar('\n');
+    }
+    putchar('\n');
+
     start = resolve_pass3(start, &addr_offset);
+
+    for (union line* line = start; line != NULL; line = line->i.next) {
+        print_line(line);
+        putchar('\n');
+    }
+    putchar('\n');
+
     start = resolve_pass4(start, addr_offset);
 
     //int bank = 0;
