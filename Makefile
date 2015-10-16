@@ -1,6 +1,6 @@
 MAKEFLAGS += --no-builtin-rules
-
 .SUFFIXES:
+
 .SECONDEXPANSION:
 
 
