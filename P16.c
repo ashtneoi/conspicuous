@@ -125,17 +125,15 @@ enum opcode {
 
 
 enum operand {
-    N, // none
-    F, // register address (0x0..0x7F)
-    Fs, // register name
+    ZERO__ = 0, // none
+    F, // register
     B, // bit number (0..7)
-    Bs, // bit name
     K, // miscellaneous constant
-    Ks, // label name
     D, // destination select (0,1)
     T, // TRIS operand (5..7)
-
-    // TODO: Implement N and MM.
+    N, // FSR or INDF number (0..1)
+    MM, // inc/dec mode selector
+    I, // miscellaneous identifier
 };
 
 
@@ -155,14 +153,14 @@ struct opcode_info opcode_info_list[] = {
     { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D} },
     { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D} },
     { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D} },
-    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, N} },
-    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {N, N} },
+    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, 0} },
+    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0, 0} },
     { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D} },
     { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D} },
     { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D} },
     { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D} },
     { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D} },
-    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, N} },
+    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, 0} },
     { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D} },
     { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D} },
     { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D} },
@@ -179,45 +177,45 @@ struct opcode_info opcode_info_list[] = {
     { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B} },
     { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B} },
 
-    { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, N},
+    { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, N},
+    { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, N},
+    { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, N},
+    { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, 0},
         .kwid = 5 },
-    { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, N},
+    { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, 0},
         .kwid = 7 },
-    { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, N},
+    { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_SUBLW, .str = "sublw", .word = 0x3C00, .opds = {K, N},
+    { .opc = C_SUBLW, .str = "sublw", .word = 0x3C00, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_XORLW, .str = "xorlw", .word = 0x3A00, .opds = {K, N},
+    { .opc = C_XORLW, .str = "xorlw", .word = 0x3A00, .opds = {K, 0},
         .kwid = 8 },
 
-    { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {K, N},
+    { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {K, 0},
         .kwid = 9 },
-    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {N, N} },
-    { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {K, N},
+    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0, 0} },
+    { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {K, 0},
         .kwid = 11 },
-    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {N, N} },
-    { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {K, N},
+    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0, 0} },
+    { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {K, 0},
         .kwid = 11 },
-    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {N, N} },
-    { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, N},
+    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0, 0} },
+    { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {N, N} },
+    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0, 0} },
 
-    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {N, N} },
-    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {N, N} },
-    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {N, N} },
-    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {N, N} },
-    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {N, N} },
-    { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, N} },
+    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0, 0} },
+    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0, 0} },
+    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0, 0} },
+    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0, 0} },
+    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
+    { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
 
-    { .opc = CD_REG, .str = ".reg", .opds = {K, K} },
-    { .opc = CD_SREG, .str = ".sreg", opds = {},
+    { .opc = CD_REG, .str = ".reg", .opds = {K, I} },
+    { .opc = CD_SREG, .str = ".sreg", .opds = {I, 0} },
 };
 
 
@@ -238,28 +236,28 @@ struct label_info {
 
 
 struct line {
+    struct line* next;
+
     struct opcode_info* oi;
-    union line* next;
+    bool star;
+
     const char* label;
 
-    union {
+    union operand {
         unsigned int f; // register file address
         const char* fs; // register name
-        int k; // literal
-        const char* ks; // label name
-        //unsigned int n; // FSR or INDF number
-        //unsigned int mm; // pre-/post-decrement/-increment select
-    } o1;
-    union {
-        const char* fs; // register name
-        unsigned int d; // destination select (0 = W, 1 = f)
         unsigned int b; // bit number
         const char* bs; // bit name
-    } o2;
+        int k; // literal
+        const char* ks; // label name
+        unsigned int d; // destination select (0 = W, 1 = f)
+        //unsigned int n; // FSR or INDF number
+        //unsigned int mm; // pre-/post-decrement/-increment select
+    } opds[2];
 };
 
 
-void print_line(union line* line)
+void print_line(struct line* line)
 {
     if (line->oi->opc == C_NONE)
         return;
@@ -273,45 +271,44 @@ void print_line(union line* line)
         printf("%s: ", line->label);
     print(oi->str);
 
-    if (oi->opds[0] == N)
-        return;
-    putchar(' ');
-    switch (oi->opds[0]) {
-        case F:
-            printf("0x%02X", line->o1.f);
-            break;
-        case Fs:
-            print(line->o1.fs);
-            break;
-        case K:
-            printf("0x%02X", line->o1.k);
-            break;
-        case Ks:
-            print(line->o1.ks);
-            break;
-        case T:
-            fatal(E_RARE, "Not implemented");
-        default:
-            fatal(E_RARE, "Impossible situation");
-    }
+    for (unsigned int i = 0; i < 2; ++i) {
+        union operand* opd = &line->opds[i];
 
-    if (oi->opds[1] == N || (oi->opds[1] == D && line->o2.d == 1))
-        return;
-    print(", ");
-    switch (oi->opds[1]) {
-        case D:
-            putchar('0'); // We already handled the '1' case.
-            break;
-        case B:
-            printf("%d", line->o2.b);
-            break;
-        case Bs:
-            print(line->o2.bs);
-            break;
-        case Fs:
-            print(line->o2.fs);
-            break;
-        case:
+        if (oi->opds[i] == 0)
+            return;
+        if (i == 1 && line->opds[i].d == 1)
+            return;
+
+        if (i == 0)
+            putchar(' ');
+        else
+            print(", ");
+
+        switch (oi->opds[i]) {
+            case F:
+                printf("0x%02X", opds->f):
+                break;
+            case Fs:
+                print(opds->fs);
+                break;
+            case B:
+                printf(", %d", opds->b);
+                break;
+            case Bs:
+                printf(", %s", opds->bs);
+                break;
+            case K:
+                printf("0x%02X", opds->k);
+                break;
+            case Ks:
+                print(opds->ks);
+                break;
+            case D:
+                print(", %c", opds->d + '0');
+                break;
+            default:
+                fatal(E_RARE, "Impossible situation");
+        }
     }
 }
 
@@ -628,7 +625,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
 
 
 static
-union line* parse_line(union line* const prev_line,
+struct line* parse_line(struct line* const prev_line,
         const struct token* token, unsigned int l, char** const label)
 {
     if (token[0].type == T_NONE)
@@ -651,7 +648,7 @@ union line* parse_line(union line* const prev_line,
         }
     }
 
-    union line* line = malloc(sizeof(union line));
+    struct line* line = malloc(sizeof(struct line));
     line->next = NULL;
     if (prev_line != NULL)
         prev_line->next = line;
@@ -685,7 +682,7 @@ union line* parse_line(union line* const prev_line,
             fatal(1, "line %u: Expected register name", l);
         line->name = token->text;
         line->addr1 = -1;
-    } else for (unsigned int i = 0; i < 2 && oi->opds[i] != N; ++i) {
+    } else for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
         if (i == 1) {
             if (token->type != T_COMMA) {
                 if (oi->opds[1] == D) {
@@ -706,7 +703,7 @@ union line* parse_line(union line* const prev_line,
                     token->num);
             line->f = token->num;
             line->f_name = NULL;
-        } else if (oi->opds[i] == FN) {
+        } else if (oi->opds[i] == Fs) {
             if (token->type != T_TEXT)
                 fatal(1, "line %u: Expected register name", l);
             line->f_name = token->text;
@@ -752,7 +749,7 @@ union line* parse_line(union line* const prev_line,
 // (forward)
 // process and remove directives
 static
-union line* assemble_pass1(union line* start)
+struct line* assemble_pass1(struct line* start)
 {
     return start;
 }
@@ -762,7 +759,7 @@ union line* assemble_pass1(union line* start)
 // (*)...f(w) : resolve, star, possibly insert *movlb
 // bra : possibly change to goto
 static
-union line* assemble_pass2(union line* start)
+struct line* assemble_pass2(struct line* start)
 {
     return start;
 }
@@ -774,7 +771,7 @@ union line* assemble_pass2(union line* start)
 // goto : resolve relative
 // call : resolve relative
 static
-union line* assemble_pass3(union line* start)
+struct line* assemble_pass3(struct line* start)
 {
     return start;
 }
@@ -784,14 +781,14 @@ union line* assemble_pass3(union line* start)
 // goto : resolve absolute, star, possibly insert *movlp
 // call : resolve absolute, star, possibly insert *movlp
 static
-union line* link_pass1(union line* start)
+struct line* link_pass1(struct line* start)
 {
     return start;
 }
 
 
 static
-uint16_t assemble_line(union line* line, unsigned int addr)
+uint16_t assemble_line(struct line* line, unsigned int addr)
 {
     (void)addr;
 
@@ -843,7 +840,7 @@ uint16_t assemble_line(union line* line, unsigned int addr)
 }
 
 
-void dump_hex(union line* start, const int out)
+void dump_hex(struct line* start, const int out)
 {
     (void)out;
 
@@ -851,7 +848,7 @@ void dump_hex(union line* start, const int out)
 
     /*unsigned int addr_offset = 0;*/
 
-    for (union line* line = start; line != NULL; line = line->next) {
+    for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
         putchar('\n');
     }
@@ -859,7 +856,7 @@ void dump_hex(union line* start, const int out)
 
     start = assemble_pass1(start);
 
-    for (union line* line = start; line != NULL; line = line->next) {
+    for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
         putchar('\n');
     }
@@ -867,7 +864,7 @@ void dump_hex(union line* start, const int out)
 
     start = assemble_pass2(start);
 
-    for (union line* line = start; line != NULL; line = line->next) {
+    for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
         putchar('\n');
     }
@@ -875,7 +872,7 @@ void dump_hex(union line* start, const int out)
 
     start = assemble_pass3(start);
 
-    for (union line* line = start; line != NULL; line = line->next) {
+    for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
         putchar('\n');
     }
@@ -884,7 +881,7 @@ void dump_hex(union line* start, const int out)
     start = link_pass1(start);
 
     //int bank = 0;
-    //for (union line line = start, addr = 0; line != NULL; line = line->next,
+    //for (struct line line = start, addr = 0; line != NULL; line = line->next,
             //++addr) {
         //if (line->label != NULL)
             //bank = -1;
@@ -911,8 +908,8 @@ bool assemble_P16(const int src)
     size_t bufpos = 0;
     size_t buflen = 1;
 
-    union line* start = NULL;
-    union line* prev_line = NULL;
+    struct line* start = NULL;
+    struct line* prev_line = NULL;
 
     opcode_info_init();
 
@@ -927,7 +924,7 @@ bool assemble_P16(const int src)
                 print_token(&tokens[i]);
         if (buflen == 0)
             break;
-        union line* line = parse_line(prev_line, tokens, l, &label);
+        struct line* line = parse_line(prev_line, tokens, l, &label);
         if (start == NULL && line != NULL)
             start = line;
         prev_line = line;
