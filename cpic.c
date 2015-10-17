@@ -15,11 +15,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define E_COMMON 1
-#define E_ARG 2
-#define E_INFO 3
-#define E_RARE 4
-
 
 const char* progname;
 int verbosity = 0;
