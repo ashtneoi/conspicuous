@@ -6,54 +6,54 @@
 #include <string.h>
 
 
-void vx_(const char* progname, int line, const char* format, ...)
+void vx_(const char* srcname, int line, const char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    fprintf(stdout, "%s:%d: ", progname, line);
+    fprintf(stdout, "%s:%d: ", srcname, line);
     vfprintf(stdout, format, args);
     putchar('\n');
 }
 
 
-void warning_(const char* progname, int line, const char* format, ...)
+void warning_(const char* srcname, int line, const char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "%s:%d: ", progname, line);
+    fprintf(stderr, "%s:%d: ", srcname, line);
     vfprintf(stderr, format, args);
     putc('\n', stderr);
 }
 
 
-void warning_e_(const char* progname, int line, const char* format, ...)
+void warning_e_(const char* srcname, int line, const char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "%s:%d: ", progname, line);
+    fprintf(stderr, "%s:%d: ", srcname, line);
     vfprintf(stderr, format, args);
     fprintf(stderr, " (%s)\n", strerror(errno));
 }
 
 
-void fatal_(int rtn, const char* progname, int line,
+void fatal_(int rtn, const char* srcname, int line,
         const char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "%s:%d: ", progname, line);
+    fprintf(stderr, "%s:%d: ", srcname, line);
     vfprintf(stderr, format, args);
     putc('\n', stderr);
     exit(rtn);
 }
 
 
-void fatal_e_(int rtn, const char* progname, int line,
+void fatal_e_(int rtn, const char* srcname, int line,
         const char* format, ...)
 {
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "%s:%d: ", progname, line);
+    fprintf(stderr, "%s:%d: ", srcname, line);
     vfprintf(stderr, format, args);
     fprintf(stderr, " (%s)\n", strerror(errno));
     exit(rtn);
