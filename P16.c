@@ -302,6 +302,8 @@ void print_line(struct line* line)
 
     if (line->label != NULL)
         printf("%s: ", line->label);
+    if (line->star)
+        putchar('*');
     print(oi->str);
 
     for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
@@ -568,14 +570,14 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 
 
 static
-void lex_line(struct token* token, const int src, size_t* const bufpos,
-    size_t* const buflen)
+void lex_line(struct token* token, const int src, unsigned int l,
+        size_t* const bufpos, size_t* const buflen)
 {
     size_t tokstart = *bufpos + 1;
     char c;
     ssize_t toklen;
     bool first_buf = true;
-    unsigned int col = 0;
+    unsigned int col = 1;
     bool ignore = false;
 
     do {
@@ -589,7 +591,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                 if (first_buf)
                     break;
                 else
-                    fatal(1, "col %u: Unexpected end of file", col);
+                    fatal(1, "%u,%u: Unexpected end of file", l, col);
             }
             first_buf = false;
         }
@@ -613,7 +615,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                 if (
                         ('A' <= t[0] && t[0] <= 'Z') ||
                         ('a' <= t[0] && t[0] <= 'z') ||
-                        t[0] == '.' || t[0] == '_') {
+                        t[0] == '.' || t[0] == '_' || t[0] == '*') {
                     token->type = T_TEXT;
                     token->text = malloc(toklen + 1);
                     memcpy(token->text, t, toklen);
@@ -622,7 +624,7 @@ void lex_line(struct token* token, const int src, size_t* const bufpos,
                 } else if (t[0] == '#' || ('0' <= t[0] && t[0] <= '9')) {
                     token = parse_number(token, t, toklen);
                 } else {
-                    fatal(1, "col %u: Invalid token", col);
+                    fatal(1, "%u,%u: Invalid token", l, col);
                 }
             }
 
@@ -682,13 +684,16 @@ struct line* parse_line(struct line* const prev_line,
     line->label = *label;
     *label = NULL;
 
-    struct opcode_info* oi = opcode_info_get(token->text);
+
+    line->star = (token->text[0] == '*');
+    struct opcode_info* oi = opcode_info_get(
+        token->text + (line->star ? 1 : 0));
     if (oi == NULL)
         fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
     ++token;
 
     line->oi = oi;
-    line->star = oi->star; // TODO: oi->star || Is there a star in the opcode?
+    line->star = line->star || oi->star;
 
     for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
         struct operand* opd = &line->opds[i];
@@ -953,7 +958,7 @@ bool assemble_P16(const int src)
     for (unsigned int l = 1; /* */; ++l) {
         v2("Lexing line");
         struct token tokens[16];
-        lex_line(tokens, src, &bufpos, &buflen);
+        lex_line(tokens, src, l, &bufpos, &buflen);
         if (verbosity >= 2)
             for (unsigned int i = 0; i < lengthof(tokens) &&
                     tokens[i].type != T_NONE; ++i)
