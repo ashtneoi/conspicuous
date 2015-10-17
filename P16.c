@@ -124,16 +124,18 @@ enum opcode {
 };
 
 
-enum operand {
-    ZERO__ = 0, // none
+enum operand_type {
+    NONE__ = 0, // none
     F, // register
-    B, // bit number (0..7)
-    K, // miscellaneous constant
-    D, // destination select (0,1)
-    T, // TRIS operand (5..7)
-    N, // FSR or INDF number (0..1)
-    MM, // inc/dec mode selector
-    I, // miscellaneous identifier
+    B, // bit number (0 - 7)
+    K, // miscellaneous number
+    L, // program address or label
+    D, // destination select (0 = W, 1 = f)
+    T, // TRIS operand (5 - 7)
+    N, // FSR or INDF number (0 - 1)
+    MM, // pre-/post-decrement/-increment select
+    A, // bank number
+    I, // unused identifier
 };
 
 
@@ -141,81 +143,119 @@ struct opcode_info {
     enum opcode opc;
     const char* str;
     uint16_t word;
-    enum operand opds[2];
+    enum operand_type opds[2];
     int kwid;
+
+    bool star;
 };
 
 
 struct opcode_info opcode_info_list[] = {
-    { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D} },
-    { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D} },
-    { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D} },
-    { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D} },
-    { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D} },
-    { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D} },
-    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, 0} },
-    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0, 0} },
-    { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D} },
-    { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D} },
-    { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D} },
-    { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D} },
-    { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D} },
-    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, 0} },
-    { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D} },
-    { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D} },
-    { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D} },
-    { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {F, D} },
-    { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D} },
-    { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D} },
+    { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D},
+        .star = false },
+    { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D},
+        .star = false },
+    { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D},
+        .star = false },
+    { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D},
+        .star = false },
+    { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D},
+        .star = false },
+    { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D},
+        .star = false },
+    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, 0},
+        .star = false },
+    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0, 0},
+        .star = true },
+    { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D},
+        .star = false },
+    { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D},
+        .star = false },
+    { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D},
+        .star = false },
+    { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D},
+        .star = false },
+    { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D},
+        .star = false },
+    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, 0},
+        .star = false },
+    { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D},
+        .star = false },
+    { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D},
+        .star = false },
+    { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D},
+        .star = false },
+    { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {F, D},
+        .star = false },
+    { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D},
+        .star = false },
+    { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D},
+        .star = false },
 
-    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0C00, .opds = {F, D} },
-    { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D} },
+    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0C00, .opds = {F, D},
+        .star = false },
+    { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D},
+        .star = false },
 
-    { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B} },
-    { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {F, B} },
+    { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B},
+        .star = false },
+    { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {F, B},
+        .star = false },
 
-    { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B} },
-    { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B} },
+    { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B},
+        .star = false },
+    { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B},
+        .star = false },
 
     { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, 0},
-        .kwid = 8 },
+        .kwid = 8, .star = true },
     { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, 0},
-        .kwid = 8 },
+        .kwid = 8, .star = true },
     { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, 0},
-        .kwid = 8 },
+        .kwid = 8, .star = true },
     { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, 0},
-        .kwid = 5 },
+        .kwid = 5, .star = true },
     { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, 0},
-        .kwid = 7 },
+        .kwid = 7, .star = true },
     { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, 0},
-        .kwid = 8 },
+        .kwid = 8, .star = true },
     { .opc = C_SUBLW, .str = "sublw", .word = 0x3C00, .opds = {K, 0},
-        .kwid = 8 },
+        .kwid = 8, .star = true },
     { .opc = C_XORLW, .str = "xorlw", .word = 0x3A00, .opds = {K, 0},
-        .kwid = 8 },
+        .kwid = 8, .star = true },
 
-    { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {K, 0},
-        .kwid = 9 },
-    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0, 0} },
-    { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {K, 0},
-        .kwid = 11 },
-    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0, 0} },
-    { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {K, 0},
-        .kwid = 11 },
-    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0, 0} },
+    { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {L, 0},
+        .kwid = 9, .star = false },
+    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0, 0},
+        .star = true },
+    { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {L, 0},
+        .kwid = 11, .star = false },
+    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0, 0},
+        .star = true },
+    { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {L, 0},
+        .kwid = 11, .star = false },
+    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0, 0},
+        .star = true },
     { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, 0},
-        .kwid = 8 },
-    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0, 0} },
+        .kwid = 8, .star = true },
+    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0, 0},
+        .star = true },
 
-    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0, 0} },
-    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0, 0} },
-    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0, 0} },
-    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0, 0} },
-    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
-    { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
+    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0, 0},
+        .star = true },
+    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0, 0},
+        .star = true },
+    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0, 0},
+        .star = true },
+    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0, 0},
+        .star = true },
+    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0},
+        .star = true },
+    { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0},
+        .star = false },
 
-    { .opc = CD_REG, .str = ".reg", .opds = {K, I} },
-    { .opc = CD_SREG, .str = ".sreg", .opds = {I, 0} },
+    { .opc = CD_REG, .str = ".reg", .opds = {A, I}, .star = false },
+    { .opc = CD_SREG, .str = ".sreg", .opds = {I, 0}, .star = false },
 };
 
 
@@ -243,16 +283,9 @@ struct line {
 
     const char* label;
 
-    union operand {
-        unsigned int f; // register file address
-        const char* fs; // register name
-        unsigned int b; // bit number
-        const char* bs; // bit name
-        int k; // literal
-        const char* ks; // label name
-        unsigned int d; // destination select (0 = W, 1 = f)
-        //unsigned int n; // FSR or INDF number
-        //unsigned int mm; // pre-/post-decrement/-increment select
+    struct operand {
+        int i;
+        const char* s;
     } opds[2];
 };
 
@@ -271,12 +304,10 @@ void print_line(struct line* line)
         printf("%s: ", line->label);
     print(oi->str);
 
-    for (unsigned int i = 0; i < 2; ++i) {
-        union operand* opd = &line->opds[i];
+    for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
+        struct operand* opd = &line->opds[i];
 
-        if (oi->opds[i] == 0)
-            return;
-        if (i == 1 && line->opds[i].d == 1)
+        if (i == 1 && oi->opds[1] == D && opd->i == 1)
             return;
 
         if (i == 0)
@@ -284,30 +315,25 @@ void print_line(struct line* line)
         else
             print(", ");
 
-        switch (oi->opds[i]) {
-            case F:
-                printf("0x%02X", opds->f):
-                break;
-            case Fs:
-                print(opds->fs);
-                break;
-            case B:
-                printf(", %d", opds->b);
-                break;
-            case Bs:
-                printf(", %s", opds->bs);
-                break;
-            case K:
-                printf("0x%02X", opds->k);
-                break;
-            case Ks:
-                print(opds->ks);
-                break;
-            case D:
-                print(", %c", opds->d + '0');
-                break;
-            default:
-                fatal(E_RARE, "Impossible situation");
+        if (opd->s != NULL) {
+            print(opd->s);
+        } else {
+            switch (oi->opds[i]) {
+                case F:
+                case K:
+                case L:
+                    printf("%#02X", opd->i);
+                    break;
+                case B:
+                case A:
+                    printf("%d", opd->i);
+                    break;
+                case D:
+                    putchar('0'); // (Already handled 1.)
+                    break;
+                default:
+                    fatal(E_RARE, "Impossible situation");
+            }
         }
     }
 }
@@ -662,31 +688,16 @@ struct line* parse_line(struct line* const prev_line,
     ++token;
 
     line->oi = oi;
+    line->star = oi->star; // TODO: oi->star || Is there a star in the opcode?
 
-    if (oi->opc == CD_REG) {
-        if (token->type != T_TEXT)
-            fatal(1, "line %u: Expected register name", l);
-        line->name = token->text;
-        ++token;
-        if (token->type == T_NONE)
-            line->addr1 = -1;
-        else if (token->type != T_COMMA)
-            fatal(1, "line %u: Expected comma or end of line", l);
-        ++token;
-        if (token->type != T_NUMBER)
-            fatal(1, "line %u: Expected traditional register address", l);
-        line->addr1 = token->num;
-        ++token;
-    } else if (oi->opc == CD_SREG) {
-        if (token->type != T_TEXT)
-            fatal(1, "line %u: Expected register name", l);
-        line->name = token->text;
-        line->addr1 = -1;
-    } else for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
+    for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
+        struct operand* opd = &line->opds[i];
+
         if (i == 1) {
             if (token->type != T_COMMA) {
                 if (oi->opds[1] == D) {
-                    line->d = 1;
+                    opd->i = 1;
+                    opd->s = NULL;
                     break;
                 } else {
                     fatal(1, "line %u: Expected comma", l);
@@ -696,46 +707,76 @@ struct line* parse_line(struct line* const prev_line,
         }
 
         if (oi->opds[i] == F) {
-            if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected register address", l);
-            else if (token->num > 0x7F)
-                fatal(1, "line %u: Address 0x%"PRIX16" out of range", l,
-                    token->num);
-            line->f = token->num;
-            line->f_name = NULL;
-        } else if (oi->opds[i] == Fs) {
-            if (token->type != T_TEXT)
-                fatal(1, "line %u: Expected register name", l);
-            line->f_name = token->text;
+            if (line->star) {
+                if (token->type != T_NUMBER)
+                    fatal(1, "line %u: Expected register address", l);
+                else if (token->num > 0x7F)
+                    fatal(1, "line %u: Address 0x%"PRIX16" out of range", l,
+                        token->num);
+                opd->i = token->num;
+                opd->s = NULL;
+            } else {
+                if (token->type != T_TEXT)
+                    fatal(1, "line %u: Expected register name", l);
+                opd->s = token->text;
+            }
         } else if (oi->opds[i] == B) {
-            if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected bit number", l);
-            else if (token->num > 7)
-                fatal(1, "line %u: Bit number out of range", l);
-            line->b = token->num;
+            if (token->type == T_NUMBER) {
+                if (token->num > 7)
+                    fatal(1, "line %u: Bit number out of range", l);
+                opd->i = token->num;
+                opd->s = NULL;
+            } else if (token->type == T_TEXT) {
+                if (line->star)
+                    fatal(1, "line %u: Expected bit number", l);
+                opd->s = token->text;
+            } else {
+                fatal(1, "line %u: Expected bit number or name", l);
+            }
         } else if (oi->opds[i] == K) {
             if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected constant", l);
+                fatal(1, "line %u: Expected literal", l);
             else if (token->num >= 1<<oi->kwid)
                 fatal(1, "line %u: Literal out of range", l);
-            line->k = token->num;
-            line->k_lbl = NULL;
-        } else if (oi->opds[i] == KL) {
-            if (token->type != T_TEXT)
-                fatal(1, "line %u: Expected label", l);
-            line->k_lbl = token->text;
+            opd->i = token->num;
+            opd->s = NULL;
+        } else if (oi->opds[i] == L) {
+            if (line->star) {
+                if (token->type != T_NUMBER)
+                    fatal(1, "line %u: Expected program address", l);
+                opd->i = token->num;
+                opd->s = NULL;
+            } else {
+                if (token->type != T_TEXT)
+                    fatal(1, "line %u: Expected program label", l);
+                opd->s = token->text;
+            }
         } else if (oi->opds[i] == D) {
             if (token->type != T_NUMBER)
                 fatal(1, "line %u: Expected destination select", l);
             else if (token->num > 1)
                 fatal(1, "line %u: Destination select out of range", l);
-            line->d = token->num;
+            opd->i = token->num;
+            opd->s = NULL;
         } else if (oi->opds[i] == T) {
+            if (token->type != T_NUMBER)
+                fatal(1, "line %u: Expected number", l); // TODO: Fix error.
             if (token->num < 5 || 7 < token->num)
                 fatal(1, "line %u: Port %"PRIu16" out of range", l,
                     token->num);
+            opd->i = token->num; // TODO: Verify or fix this.
+            opd->s = NULL;
+        } else if (oi->opds[i] == A) {
+            // TODO: Implement additional restrictions.
+            if (token->type != T_NUMBER)
+                fatal(1, "line %u: Expected bank number", l);
+            opd->i = token->num;
+            opd->s = NULL;
+        } else if (oi->opds[i] == I) {
+            if (token->type != T_TEXT)
+                fatal(1, "line %u: Expected unused identifier", l);
+            opd->s = token->text;
         }
-
         ++token;
     }
 
@@ -771,7 +812,7 @@ struct line* assemble_pass2(struct line* start)
 // goto : resolve relative
 // call : resolve relative
 static
-struct line* assemble_pass3(struct line* start)
+struct line* link_pass1(struct line* start)
 {
     return start;
 }
@@ -781,7 +822,7 @@ struct line* assemble_pass3(struct line* start)
 // goto : resolve absolute, star, possibly insert *movlp
 // call : resolve absolute, star, possibly insert *movlp
 static
-struct line* link_pass1(struct line* start)
+struct line* link_pass2(struct line* start)
 {
     return start;
 }
@@ -792,48 +833,37 @@ uint16_t assemble_line(struct line* line, unsigned int addr)
 {
     (void)addr;
 
-    enum opcode opc = line->oi->opc;
-
     uint16_t word = line->oi->word;
 
-    if (
-            opc == C_ADDWF || opc == C_ADDWFC ||
-            opc == C_ANDWF || opc == C_LSLF ||
-            opc == C_LSRF || opc == C_CLRF ||
-            opc == C_COMF || opc == C_DECF ||
-            opc == C_INCF || opc == C_IORWF ||
-            opc == C_MOVF || opc == C_MOVWF ||
-            opc == C_RLF || opc == C_RRF ||
-            opc == C_SUBWF || opc == C_SUBWFB ||
-            opc == C_SWAPF || opc == C_XORWF ||
-            opc == C_DECFSZ || opc == C_INCFSZ) {
-        if (opc == C_CLRF || opc == C_MOVWF || line->d)
-            word |= 0x0080;
-        word |= line->f;
-    } else if (
-            opc == C_BCF || opc == C_BSF ||
-            opc == C_BTFSC || opc == C_BTFSS) {
-        word |= (line->b << 7) | line->f;
-    } else if (
-            opc == C_ADDLW || opc == C_ANDLW ||
-            opc == C_IORLW || opc == C_MOVLB ||
-            opc == C_MOVLP || opc == C_MOVLW ||
-            opc == C_SUBLW || opc == C_XORLW ||
-            opc == C_BRA || opc == C_CALL ||
-            opc == C_GOTO || opc == C_RETLW) {
-        if (line->k_lbl != NULL) {
-            fatal(1, "NOT IMPLEMENTED");
-            //line->k = label_info[h].addr;
-        }
+    if (!line->star)
+        fatal(E_RARE, "Line not starred"); // FIXME: Improve error.
 
-        // To be portable, we can't assume this machine uses a two's complement
-        // representation.
-        if (line->k >= 0)
-            word |= line->k;
-        else
-            word |= (1 << line->oi->kwid) + line->k;
-    } else if (opc == C_TRIS) {
-        word |= line->f;
+    int num = line->opds[0].i;
+    switch (line->oi->opds[0]) {
+        case F:
+        case T:
+            word |= num;
+            break;
+        case K:
+            // To be portable, we can't assume this machine uses a two's
+            // complement representation.
+            if (num >= 0)
+                word |= num;
+            else
+                word |= (1 << line->oi->kwid) + num;
+            break;
+        default:
+            fatal(E_RARE, "Impossible situation");
+    }
+
+    num = line->opds[1].i;
+    switch (line->oi->opds[1]) {
+        case D:
+        case B:
+            word |= num << 7;
+            break;
+        default:
+            fatal(E_RARE, "Impossible situation");
     }
 
     return word;
@@ -870,7 +900,7 @@ void dump_hex(struct line* start, const int out)
     }
     putchar('\n');
 
-    start = assemble_pass3(start);
+    start = link_pass1(start);
 
     for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
@@ -878,7 +908,13 @@ void dump_hex(struct line* start, const int out)
     }
     putchar('\n');
 
-    start = link_pass1(start);
+    start = link_pass2(start);
+
+    for (struct line* line = start; line != NULL; line = line->next) {
+        print_line(line);
+        putchar('\n');
+    }
+    putchar('\n');
 
     //int bank = 0;
     //for (struct line line = start, addr = 0; line != NULL; line = line->next,
