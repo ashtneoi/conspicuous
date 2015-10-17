@@ -4,7 +4,7 @@
 
 #include "bufman.h"
 #include "fail.h"
-#include "P16F1454.h"
+#include "P16.h"
 #include "utils.h"
 
 #include <fcntl.h>
@@ -61,12 +61,12 @@ const char* const msg_processor_required =
 
 
 enum processor {
-    P16F1454,
+    P16,
     P_NONE,
 };
 
 const char* const processors[] = {
-    [P16F1454] = "16F1454",
+    [P16] = "16F1454",
 };
 
 //
@@ -163,8 +163,8 @@ int main(int argc, char** argv)
     // Assemble the source file.
 
     switch (args.processor) {
-    case P16F1454:
-        if (!assemble_16F1454(src))
+    case P16:
+        if (!assemble_P16(src))
             return E_COMMON;
         break;
     case P_NONE:

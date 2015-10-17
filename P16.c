@@ -1,4 +1,4 @@
-#include "P16F1454.h"
+#include "P16.h"
 
 #include "bufman.h"
 #include "fail.h"
@@ -1087,7 +1087,7 @@ void dump_hex(union line* start, const int out)
 }
 
 
-bool assemble_16F1454(const int src)
+bool assemble_P16(const int src)
 {
     size_t bufpos = 0;
     size_t buflen = 1;

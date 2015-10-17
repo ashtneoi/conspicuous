@@ -6,4 +6,4 @@
 #include <stdbool.h>
 
 
-bool assemble_16F1454(const int src);
+bool assemble_P16(const int src);
