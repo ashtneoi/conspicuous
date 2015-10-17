@@ -117,7 +117,7 @@ enum opcode {
     C__LAST__,
 
     CD_REG,
-    CD_SREG,
+    CD_CREG,
     CD__LAST__,
 
     // TODO: Implement more.
@@ -126,16 +126,16 @@ enum opcode {
 
 enum operand_type {
     NONE__ = 0, // none
-    F, // register
-    B, // bit number (0 - 7)
-    K, // miscellaneous number
-    L, // program address or label
-    D, // destination select (0 = W, 1 = f)
-    T, // TRIS operand (5 - 7)
-    N, // FSR or INDF number (0 - 1)
-    MM, // pre-/post-decrement/-increment select
-    A, // bank number
-    I, // unused identifier
+    F = 1, // register
+    B = 2, // bit number (0 - 7)
+    K = 3, // miscellaneous number
+    L = 4, // program address or label
+    D = 5, // destination select (0 = W, 1 = f)
+    T = 6, // TRIS operand (5 - 7)
+    N = 7, // FSR or INDF number (0 - 1)
+    MM = 8, // pre-/post-decrement/-increment select
+    A = 9, // bank number
+    I = 10, // unused identifier
 };
 
 
@@ -255,7 +255,7 @@ struct opcode_info opcode_info_list[] = {
         .star = false },
 
     { .opc = CD_REG, .str = ".reg", .opds = {A, I}, .star = false },
-    { .opc = CD_SREG, .str = ".sreg", .opds = {I, 0}, .star = false },
+    { .opc = CD_CREG, .str = ".creg", .opds = {I, 0}, .star = false },
 };
 
 
@@ -834,7 +834,7 @@ struct line* link_pass2(struct line* start)
 
 
 static
-uint16_t assemble_line(struct line* line, unsigned int addr)
+uint16_t dump_line(struct line* line, unsigned int addr)
 {
     (void)addr;
 
@@ -843,6 +843,9 @@ uint16_t assemble_line(struct line* line, unsigned int addr)
     if (!line->star)
         fatal(E_RARE, "Line not starred"); // FIXME: Improve error.
 
+    enum operand_type type = line->oi->opds[0];
+    if (type == 0)
+        return word;
     int num = line->opds[0].i;
     switch (line->oi->opds[0]) {
         case F:
@@ -858,9 +861,12 @@ uint16_t assemble_line(struct line* line, unsigned int addr)
                 word |= (1 << line->oi->kwid) + num;
             break;
         default:
-            fatal(E_RARE, "Impossible situation");
+            fatal(E_RARE, "Unrecognized operand type (%d)", line->oi->opds[0]);
     }
 
+    type = line->oi->opds[1];
+    if (type == 0)
+        return word;
     num = line->opds[1].i;
     switch (line->oi->opds[1]) {
         case D:
@@ -868,7 +874,7 @@ uint16_t assemble_line(struct line* line, unsigned int addr)
             word |= num << 7;
             break;
         default:
-            fatal(E_RARE, "Impossible situation");
+            fatal(E_RARE, "Unrecognized operand type (%d)", line->oi->opds[1]);
     }
 
     return word;
@@ -920,6 +926,10 @@ void dump_hex(struct line* start, const int out)
         putchar('\n');
     }
     putchar('\n');
+
+    for (struct line* line = start; line != NULL; line = line->next) {
+        printf("%04X\n", dump_line(line, 0));
+    }
 
     //int bank = 0;
     //for (struct line line = start, addr = 0; line != NULL; line = line->next,
