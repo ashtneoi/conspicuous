@@ -752,56 +752,128 @@ struct line* parse_line(struct line* const prev_line,
 }
 
 
-//// Tasks ////
-// .___ : process, remove
-// ___f___ : possibly insert *movlb, change to *___f___
-// *___f___ : resolve
-// bra : possibly change to goto, resolve relative
-// goto : resolve relative, resolve absolute
-// call : resolve relative, resolve absolute
-
-
-
 //// A1 (forward) ////
 // .___ : process, remove
-// ___f___ : possibly insert movlb
+// ___f___ : insert movlb if bank not active
 // [*]___f___ : resolve
-// store labels
-// bra : possibly change to goto
-
-//// A2 (reverse) ////
-// bra : possibly change to goto, possibly resolve relative
-//
-
-
-
+// bra : change to goto if destination far, star if destination near
 static
 struct line* assemble_pass1(struct line* start)
 {
+    label_info_init();
+
+    struct opcode_info* oi_goto = opcode_info_get("goto");
+
+    int addr = 0;
     struct line* prev = NULL;
-    for (struct line* line = start; line != NULL; line = line->next) {
-        (void)prev;
+    struct line* line = start;
+    while (line != NULL) {
         enum opcode opc = line->oi->opc;
+
+        // Resolve register names.
         bool is_f = (
             (C_ADDWF <= opc && opc <= C_LSRF) ||
             (C_COMF <= opc && opc <= C_BTFSS)
         );
         if (is_f && line->opds[0].s != NULL)
-            fatal(E_RARE, "Register name resolution not implemented");
+            fatal(E_RARE, "Register name resolution and bank auto-switching "
+                "not implemented");
 
-        prev = line;
+        // Store label info.
+        if (line->label != NULL) {
+            struct label_info* li = label_info_avail(line->label);
+            li->name = line->label;
+            li->addr = addr;
+        }
+
+        // Handle bra.
+        if (opc == C_BRA) {
+            struct label_info* li = label_info_get(line->opds[0].s);
+            if (li != NULL) {
+                if ((addr + 1) - li->addr > 255) // reverse limit
+                    line->oi = oi_goto;
+                else
+                    line->star = true;
+            }
+        }
+
+        bool is_two = (opc == C_GOTO || opc == C_CALL);
+        addr += is_two ? 2 : 1;
+
+        {
+            struct line* old_next = line->next;
+            line->next = prev;
+            prev = line;
+            line = old_next;
+        }
     }
-    return start;
+
+    return prev;
 }
 
 
+//// A2 (reverse) ////
+// bra : change to goto if destination far or not seen
+// label : store
 static
-struct line* assemble_pass2(struct line* start)
+struct line* assemble_pass2(struct line* start, int* len)
 {
+    label_info_init();
+
+    struct opcode_info* oi_goto = opcode_info_get("goto");
+
+    int addr = 0;
+    struct line* prev = NULL;
+    struct line* line = start;
+    while (line != NULL) {
+        enum opcode opc = line->oi->opc;
+
+        // Store label info.
+        if (line->label != NULL) {
+            struct label_info* li = label_info_avail(line->label);
+            li->name = line->label;
+            li->addr = addr;
+        }
+
+        // Handle bra.
+        if (opc == C_BRA) {
+            struct label_info* li = label_info_get(line->opds[0].s);
+            if (li != NULL) {
+                if ((addr - 1) - li->addr > 256) // forward limit
+                    line->oi = oi_goto;
+            }
+        }
+
+        bool is_two = (opc == C_GOTO || opc == C_CALL);
+        addr += is_two ? 2 : 1;
+
+        {
+            struct line* old_next = line->next;
+            line->next = prev;
+            prev = line;
+            line = old_next;
+        }
+    }
+
+    *len = addr;
+
+    return prev;
+}
+
+
+//// A3 (forward) ////
+// [*]bra : resolve
+// goto, call : resolve relative if destination stored
+static
+struct line* assemble_pass3(struct line* start, int len)
+{
+    (void)len;
     return start;
 }
 
 
+//// L1 (forward) ////
+// label info : resolve absolute, store
 static
 struct line* link_pass1(struct line* start)
 {
@@ -809,6 +881,8 @@ struct line* link_pass1(struct line* start)
 }
 
 
+//// L2 (forward) ////
+// goto, call : resolve absolute, insert movlp
 static
 struct line* link_pass2(struct line* start)
 {
@@ -882,7 +956,16 @@ void dump_hex(struct line* start, const int out)
     }
     putchar('\n');
 
-    start = assemble_pass2(start);
+    int len;
+    start = assemble_pass2(start, &len);
+
+    for (struct line* line = start; line != NULL; line = line->next) {
+        print_line(line);
+        putchar('\n');
+    }
+    putchar('\n');
+
+    start = assemble_pass3(start, len);
 
     for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
