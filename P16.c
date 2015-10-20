@@ -287,7 +287,7 @@ void print_line(struct line* line)
                     printf("0x%02X", opd->i);
                     break;
                 case L:
-                    printf("0x%02X", opd->i);
+                    printf("0x%02"PRIX8, (int8_t)opd->i);
                     break;
                 case B:
                 case A:
@@ -942,14 +942,16 @@ uint16_t dump_line(struct line* line)
         return word;
     if (line->opds[0].s != NULL)
         fatal(E_RARE, "Unresolved symbol");
-    int num = line->opds[0].i;
+    uint16_t num = line->opds[0].i;
 
     switch (line->oi->opds[0]) {
         case F:
         case T:
         case K:
-        case L:
             word |= num;
+            break;
+        case L:
+            word |= num & ((1 << line->oi->kwid) - 1);
             break;
         default:
             fatal(E_RARE, "Unrecognized operand type (%d)", line->oi->opds[0]);
@@ -976,24 +978,31 @@ uint16_t dump_line(struct line* line)
 
 void dump_hex(struct line* start, int len)
 {
-    union unsign16 {
-        int16_t i;
-        uint16_t u;
+    union unsign8 {
+        uint8_t u;
+        int8_t i;
     };
 
     int addr = 0;
     struct line* line = start;
     while (line != NULL) {
         int insn_count = (len - addr >= 8) ? 8 : len - addr;
-        printf(":%02X%04X00", insn_count * 2, addr);
-        union unsign16 sum;
-        sum.i = 0;
+        union unsign8 sum;
+        sum.i = insn_count * 2 + addr * 2;
+        printf(":%02X%04X00", insn_count * 2, addr * 2);
         for (int i = 0; i < insn_count; ++i) {
+            if (verbosity >= 2) {
+                print_line(line);
+                putchar('\n');
+            }
             uint16_t line_bin = dump_line(line);
             printf("%02"PRIX8"%02"PRIX8, line_bin & 0xFF, line_bin >> 8);
-            sum.i -= (line_bin & 0xFF) + (line_bin >> 8);
+            if (verbosity >= 2)
+                putchar('\n');
+            sum.u += (line_bin & 0xFF) + (line_bin >> 8);
             line = line->next;
         }
+        sum.i = -sum.i;
         printf("%02"PRIX8"\n", sum.u);
     }
     print(":00000001FF\n");
@@ -1028,51 +1037,69 @@ bool assemble_P16(const int src)
     }
 
     for (struct line* line = start; line != NULL; line = line->next) {
-        print_line(line);
-        putchar('\n');
+        if (verbosity >= 1) {
+            print_line(line);
+            putchar('\n');
+        }
     }
-    putchar('\n');
+    if (verbosity >= 1)
+        putchar('\n');
 
     start = assemble_pass1(start);
 
     for (struct line* line = start; line != NULL; line = line->next) {
-        print_line(line);
-        putchar('\n');
+        if (verbosity >= 1) {
+            print_line(line);
+            putchar('\n');
+        }
     }
-    putchar('\n');
+    if (verbosity >= 1)
+        putchar('\n');
 
     int len;
     start = assemble_pass2(start, &len);
 
     for (struct line* line = start; line != NULL; line = line->next) {
-        print_line(line);
-        putchar('\n');
+        if (verbosity >= 1) {
+            print_line(line);
+            putchar('\n');
+        }
     }
-    putchar('\n');
+    if (verbosity >= 1)
+        putchar('\n');
 
     start = assemble_pass3(start, len);
 
     for (struct line* line = start; line != NULL; line = line->next) {
-        print_line(line);
-        putchar('\n');
+        if (verbosity >= 1) {
+            print_line(line);
+            putchar('\n');
+        }
     }
-    putchar('\n');
+    if (verbosity >= 1)
+        putchar('\n');
 
     start = link_pass1(start);
 
     for (struct line* line = start; line != NULL; line = line->next) {
-        print_line(line);
-        putchar('\n');
+        if (verbosity >= 1) {
+            print_line(line);
+            putchar('\n');
+        }
     }
-    putchar('\n');
+    if (verbosity >= 1)
+        putchar('\n');
 
     start = link_pass2(start);
 
     for (struct line* line = start; line != NULL; line = line->next) {
-        print_line(line);
-        putchar('\n');
+        if (verbosity >= 1) {
+            print_line(line);
+            putchar('\n');
+        }
     }
-    putchar('\n');
+    if (verbosity >= 1)
+        putchar('\n');
 
     dump_hex(start, len);
 
