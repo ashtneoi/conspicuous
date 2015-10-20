@@ -126,16 +126,16 @@ enum opcode {
 
 enum operand_type {
     NONE__ = 0, // none
-    F = 1, // register
-    B = 2, // bit number (0 - 7)
-    K = 3, // miscellaneous number
-    L = 4, // program address or label
-    D = 5, // destination select (0 = W, 1 = f)
-    T = 6, // TRIS operand (5 - 7)
-    N = 7, // FSR or INDF number (0 - 1)
-    MM = 8, // pre-/post-decrement/-increment select
-    A = 9, // bank number
-    I = 10, // unused identifier
+    F, // register
+    B, // bit number (0 - 7)
+    K, // miscellaneous number
+    L, // program address or label
+    D, // destination select (0 = W, 1 = f)
+    T, // TRIS operand (5 - 7)
+    N, // FSR or INDF number (0 - 1)
+    MM, // pre-/post-decrement/-increment select
+    A, // bank number
+    I, // unused identifier
 };
 
 
@@ -145,117 +145,78 @@ struct opcode_info {
     uint16_t word;
     enum operand_type opds[2];
     int kwid;
-
-    bool star;
 };
 
 
 struct opcode_info opcode_info_list[] = {
-    { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D},
-        .star = false },
-    { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D},
-        .star = false },
-    { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D},
-        .star = false },
-    { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D},
-        .star = false },
-    { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D},
-        .star = false },
-    { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D},
-        .star = false },
-    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, 0},
-        .star = false },
-    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0, 0},
-        .star = true },
-    { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D},
-        .star = false },
-    { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D},
-        .star = false },
-    { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D},
-        .star = false },
-    { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D},
-        .star = false },
-    { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D},
-        .star = false },
-    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, 0},
-        .star = false },
-    { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D},
-        .star = false },
-    { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D},
-        .star = false },
-    { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D},
-        .star = false },
-    { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {F, D},
-        .star = false },
-    { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D},
-        .star = false },
-    { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D},
-        .star = false },
+    { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D} },
+    { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D} },
+    { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D} },
+    { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D} },
+    { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D} },
+    { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D} },
+    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, 0} },
+    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0, 0} },
+    { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D} },
+    { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D} },
+    { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D} },
+    { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D} },
+    { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D} },
+    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, 0} },
+    { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D} },
+    { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D} },
+    { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D} },
+    { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {F, D} },
+    { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D} },
+    { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D} },
 
-    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0C00, .opds = {F, D},
-        .star = false },
-    { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D},
-        .star = false },
+    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0C00, .opds = {F, D} },
+    { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D} },
 
-    { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B},
-        .star = false },
-    { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {F, B},
-        .star = false },
+    { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B} },
+    { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {F, B} },
 
-    { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B},
-        .star = false },
-    { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B},
-        .star = false },
+    { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B} },
+    { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B} },
 
     { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, 0},
-        .kwid = 8, .star = true },
+        .kwid = 8 },
     { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, 0},
-        .kwid = 8, .star = true },
+        .kwid = 8 },
     { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, 0},
-        .kwid = 8, .star = true },
+        .kwid = 8 },
     { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, 0},
-        .kwid = 5, .star = true },
+        .kwid = 5 },
     { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, 0},
-        .kwid = 7, .star = true },
+        .kwid = 7 },
     { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, 0},
-        .kwid = 8, .star = true },
+        .kwid = 8 },
     { .opc = C_SUBLW, .str = "sublw", .word = 0x3C00, .opds = {K, 0},
-        .kwid = 8, .star = true },
+        .kwid = 8 },
     { .opc = C_XORLW, .str = "xorlw", .word = 0x3A00, .opds = {K, 0},
-        .kwid = 8, .star = true },
+        .kwid = 8 },
 
-    { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {L, 0},
-        .kwid = 9, .star = false },
-    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0, 0},
-        .star = true },
+    { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {L, 0}, .kwid = 9 },
+    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0, 0} },
     { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {L, 0},
-        .kwid = 11, .star = false },
-    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0, 0},
-        .star = true },
+        .kwid = 11 },
+    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0, 0} },
     { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {L, 0},
-        .kwid = 11, .star = false },
-    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0, 0},
-        .star = true },
+        .kwid = 11 },
+    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0, 0} },
     { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, 0},
-        .kwid = 8, .star = true },
-    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0, 0},
-        .star = true },
+        .kwid = 8 },
+    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0, 0} },
 
-    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0, 0},
-        .star = true },
-    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0, 0},
-        .star = true },
-    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0, 0},
-        .star = true },
-    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0, 0},
-        .star = true },
-    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0},
-        .star = true },
-    { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0},
-        .star = false },
+    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0, 0} },
+    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0, 0} },
+    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0, 0} },
+    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0, 0} },
+    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
+    { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
 
-    { .opc = CD_REG, .str = ".reg", .opds = {A, I}, .star = false },
-    { .opc = CD_CREG, .str = ".creg", .opds = {I, 0}, .star = false },
+    { .opc = CD_REG, .str = ".reg", .opds = {A, I} },
+    { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
 };
 
 
@@ -693,7 +654,6 @@ struct line* parse_line(struct line* const prev_line,
     ++token;
 
     line->oi = oi;
-    line->star = line->star || oi->star;
 
     for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
         struct operand* opd = &line->opds[i];
@@ -792,18 +752,49 @@ struct line* parse_line(struct line* const prev_line,
 }
 
 
-// (forward)
-// process and remove directives
+//// Tasks ////
+// .___ : process, remove
+// ___f___ : possibly insert *movlb, change to *___f___
+// *___f___ : resolve
+// bra : possibly change to goto, resolve relative
+// goto : resolve relative, resolve absolute
+// call : resolve relative, resolve absolute
+
+
+
+//// A1 (forward) ////
+// .___ : process, remove
+// ___f___ : possibly insert movlb
+// [*]___f___ : resolve
+// store labels
+// bra : possibly change to goto
+
+//// A2 (reverse) ////
+// bra : possibly change to goto, possibly resolve relative
+//
+
+
+
 static
 struct line* assemble_pass1(struct line* start)
 {
+    struct line* prev = NULL;
+    for (struct line* line = start; line != NULL; line = line->next) {
+        (void)prev;
+        enum opcode opc = line->oi->opc;
+        bool is_f = (
+            (C_ADDWF <= opc && opc <= C_LSRF) ||
+            (C_COMF <= opc && opc <= C_BTFSS)
+        );
+        if (is_f && line->opds[0].s != NULL)
+            fatal(E_RARE, "Register name resolution not implemented");
+
+        prev = line;
+    }
     return start;
 }
 
 
-// (forward)
-// (*)...f(w) : resolve, star, possibly insert *movlb
-// bra : possibly change to goto
 static
 struct line* assemble_pass2(struct line* start)
 {
@@ -811,11 +802,6 @@ struct line* assemble_pass2(struct line* start)
 }
 
 
-// (reverse)
-// bra : possibly change to goto
-// bra : resolve relative, star
-// goto : resolve relative
-// call : resolve relative
 static
 struct line* link_pass1(struct line* start)
 {
@@ -823,9 +809,6 @@ struct line* link_pass1(struct line* start)
 }
 
 
-// (forward)
-// goto : resolve absolute, star, possibly insert *movlp
-// call : resolve absolute, star, possibly insert *movlp
 static
 struct line* link_pass2(struct line* start)
 {
@@ -840,25 +823,19 @@ uint16_t dump_line(struct line* line, unsigned int addr)
 
     uint16_t word = line->oi->word;
 
-    if (!line->star)
-        fatal(E_RARE, "Line not starred"); // FIXME: Improve error.
-
     enum operand_type type = line->oi->opds[0];
     if (type == 0)
         return word;
+    if (line->opds[0].s != NULL)
+        fatal(E_RARE, "Unresolved symbol");
     int num = line->opds[0].i;
+
     switch (line->oi->opds[0]) {
         case F:
         case T:
-            word |= num;
-            break;
         case K:
-            // To be portable, we can't assume this machine uses a two's
-            // complement representation.
-            if (num >= 0)
-                word |= num;
-            else
-                word |= (1 << line->oi->kwid) + num;
+        case L:
+            word |= num;
             break;
         default:
             fatal(E_RARE, "Unrecognized operand type (%d)", line->oi->opds[0]);
@@ -867,10 +844,12 @@ uint16_t dump_line(struct line* line, unsigned int addr)
     type = line->oi->opds[1];
     if (type == 0)
         return word;
+    if (line->opds[1].s != NULL)
+        fatal(E_RARE, "Unresolved symbol");
     num = line->opds[1].i;
     switch (line->oi->opds[1]) {
-        case D:
         case B:
+        case D:
             word |= num << 7;
             break;
         default:
