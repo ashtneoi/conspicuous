@@ -284,8 +284,10 @@ void print_line(struct line* line)
             switch (oi->opds[i]) {
                 case F:
                 case K:
+                    printf("0x%02X", opd->i);
+                    break;
                 case L:
-                    printf("%#02X", opd->i);
+                    printf("0x%02X", opd->i);
                     break;
                 case B:
                 case A:
@@ -756,7 +758,7 @@ struct line* parse_line(struct line* const prev_line,
 // .___ : process, remove
 // ___f___ : insert movlb if bank not active
 // [*]___f___ : resolve
-// bra : change to goto if destination far, star if destination near
+// bra : change to goto if target far, star if target near
 static
 struct line* assemble_pass1(struct line* start)
 {
@@ -797,9 +799,10 @@ struct line* assemble_pass1(struct line* start)
             }
         }
 
-        bool is_two = (opc == C_GOTO || opc == C_CALL);
-        addr += is_two ? 2 : 1;
+        // Increment address.
+        addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
 
+        // Advance to next line.
         {
             struct line* old_next = line->next;
             line->next = prev;
@@ -813,7 +816,7 @@ struct line* assemble_pass1(struct line* start)
 
 
 //// A2 (reverse) ////
-// bra : change to goto if destination far or not seen
+// bra : change to goto if target far or not seen
 // label : store
 static
 struct line* assemble_pass2(struct line* start, int* len)
@@ -833,6 +836,7 @@ struct line* assemble_pass2(struct line* start, int* len)
             struct label_info* li = label_info_avail(line->label);
             li->name = line->label;
             li->addr = addr;
+            v2("label %s = %i", li->name, li->addr);
         }
 
         // Handle bra.
@@ -841,12 +845,15 @@ struct line* assemble_pass2(struct line* start, int* len)
             if (li != NULL) {
                 if ((addr - 1) - li->addr > 256) // forward limit
                     line->oi = oi_goto;
+                else
+                    line->star = true;
             }
         }
 
-        bool is_two = (opc == C_GOTO || opc == C_CALL);
-        addr += is_two ? 2 : 1;
+        // Increment addr.
+        addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
 
+        // Advance to next line.
         {
             struct line* old_next = line->next;
             line->next = prev;
@@ -863,11 +870,46 @@ struct line* assemble_pass2(struct line* start, int* len)
 
 //// A3 (forward) ////
 // [*]bra : resolve
-// goto, call : resolve relative if destination stored
+// goto, call : resolve relative if target stored
 static
 struct line* assemble_pass3(struct line* start, int len)
 {
-    (void)len;
+    int addr = 0;
+    struct line* line = start;
+    while (line != NULL) {
+        enum opcode opc = line->oi->opc;
+
+        // Store label info.
+        if (line->label != NULL) {
+            struct label_info* li = label_info_avail(line->label);
+            li->name = line->label;
+            li->addr = addr;
+        }
+
+        // Handle bra.
+        if (opc == C_BRA) {
+            struct label_info* li = label_info_get(line->opds[0].s);
+            if (li == NULL)
+                fatal(E_RARE, "Target should not be unknown");
+            line->opds[0].s = NULL;
+            line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
+        } else if (opc == C_GOTO || opc == C_CALL) {
+            struct label_info* li = label_info_get(line->opds[0].s);
+            if (li != NULL) {
+                line->opds[0].s = NULL;
+                line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
+                if (line->opds[0].i < 0)
+                    --line->opds[0].i;
+            }
+        }
+
+        // Increment addr.
+        addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
+
+        // Advance to next line.
+        line = line->next;
+    }
+
     return start;
 }
 
@@ -891,10 +933,8 @@ struct line* link_pass2(struct line* start)
 
 
 static
-uint16_t dump_line(struct line* line, unsigned int addr)
+uint16_t dump_line(struct line* line)
 {
-    (void)addr;
-
     uint16_t word = line->oi->word;
 
     enum operand_type type = line->oi->opds[0];
@@ -934,13 +974,58 @@ uint16_t dump_line(struct line* line, unsigned int addr)
 }
 
 
-void dump_hex(struct line* start, const int out)
+void dump_hex(struct line* start, int len)
 {
-    (void)out;
+    union unsign16 {
+        int16_t i;
+        uint16_t u;
+    };
 
-    label_info_init();
+    int addr = 0;
+    struct line* line = start;
+    while (line != NULL) {
+        int insn_count = (len - addr >= 8) ? 8 : len - addr;
+        printf(":%02X%04X00", insn_count * 2, addr);
+        union unsign16 sum;
+        sum.i = 0;
+        for (int i = 0; i < insn_count; ++i) {
+            uint16_t line_bin = dump_line(line);
+            printf("%02"PRIX8"%02"PRIX8, line_bin & 0xFF, line_bin >> 8);
+            sum.i -= (line_bin & 0xFF) + (line_bin >> 8);
+            line = line->next;
+        }
+        printf("%02"PRIX8"\n", sum.u);
+    }
+    print(":00000001FF\n");
+}
 
-    /*unsigned int addr_offset = 0;*/
+
+bool assemble_P16(const int src)
+{
+    size_t bufpos = 0;
+    size_t buflen = 1;
+
+    struct line* start = NULL;
+    struct line* prev_line = NULL;
+
+    opcode_info_init();
+
+    char* label = NULL;
+    for (unsigned int l = 1; /* */; ++l) {
+        v2("Lexing line");
+        struct token tokens[16];
+        lex_line(tokens, src, l, &bufpos, &buflen);
+        if (verbosity >= 2)
+            for (unsigned int i = 0; i < lengthof(tokens) &&
+                    tokens[i].type != T_NONE; ++i)
+                print_token(&tokens[i]);
+        if (buflen == 0)
+            break;
+        struct line* line = parse_line(prev_line, tokens, l, &label);
+        if (start == NULL && line != NULL)
+            start = line;
+        prev_line = line;
+    }
 
     for (struct line* line = start; line != NULL; line = line->next) {
         print_line(line);
@@ -989,61 +1074,7 @@ void dump_hex(struct line* start, const int out)
     }
     putchar('\n');
 
-    for (struct line* line = start; line != NULL; line = line->next) {
-        printf("%04X\n", dump_line(line, 0));
-    }
-
-    //int bank = 0;
-    //for (struct line line = start, addr = 0; line != NULL; line = line->next,
-            //++addr) {
-        //if (line->label != NULL)
-            //bank = -1;
-        //else if (line->oi->opc == C_MOVLB)
-            //bank = line->k;
-        //printf("0x%04"PRIX16"\n", assemble_line(line, addr));
-        //printf("  bank = %d\n", bank);
-    //}
-
-    /*while (true) {*/
-        /*char data[16 * 2];*/
-        /*unsigned int i;*/
-        /*for (i = 0; i < 16 * 2; i += 2, ++addr, line = line->next) {*/
-            /*if (line == NULL) {*/
-                /*fputs(":00000001FF\n", out);*/
-                /*return;*/
-            /*}*/
-            /*sprintf(&data[i], "%02X", assemble_line(*/
-}
-
-
-bool assemble_P16(const int src)
-{
-    size_t bufpos = 0;
-    size_t buflen = 1;
-
-    struct line* start = NULL;
-    struct line* prev_line = NULL;
-
-    opcode_info_init();
-
-    char* label = NULL;
-    for (unsigned int l = 1; /* */; ++l) {
-        v2("Lexing line");
-        struct token tokens[16];
-        lex_line(tokens, src, l, &bufpos, &buflen);
-        if (verbosity >= 2)
-            for (unsigned int i = 0; i < lengthof(tokens) &&
-                    tokens[i].type != T_NONE; ++i)
-                print_token(&tokens[i]);
-        if (buflen == 0)
-            break;
-        struct line* line = parse_line(prev_line, tokens, l, &label);
-        if (start == NULL && line != NULL)
-            start = line;
-        prev_line = line;
-    }
-
-    dump_hex(start, 0);
+    dump_hex(start, len);
 
     return false;
 }
