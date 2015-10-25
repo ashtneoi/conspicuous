@@ -159,8 +159,7 @@ int main(int argc, char** argv)
 
     switch (args.processor) {
     case P16:
-        if (!assemble_P16(src))
-            return E_COMMON;
+        assemble_P16(src);
         break;
     case P_NONE:
         fatal(E_RARE, "This should never happen!");

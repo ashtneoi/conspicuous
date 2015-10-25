@@ -1009,7 +1009,7 @@ void dump_hex(struct line* start, int len)
 }
 
 
-bool assemble_P16(const int src)
+void assemble_P16(const int src)
 {
     size_t bufpos = 0;
     size_t buflen = 1;
@@ -1102,6 +1102,4 @@ bool assemble_P16(const int src)
         putchar('\n');
 
     dump_hex(start, len);
-
-    return false;
 }
