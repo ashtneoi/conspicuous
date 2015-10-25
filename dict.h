@@ -1,0 +1,16 @@
+#pragma once
+
+
+#include <stdlib.h>
+
+
+struct dict {
+    void* array;
+    const size_t capacity;
+    const size_t value_len;
+};
+
+
+void dict_init(const struct dict* dict);
+void* dict_avail(const struct dict* dict, const char* key);
+void* dict_get(const struct dict* dict, const char* key);

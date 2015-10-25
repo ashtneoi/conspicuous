@@ -1,8 +1,10 @@
+#include "common.h"
 #include "P16.h"
 
 #include "bufman.h"
-#include "fail.h"
 #include "cpic.h"
+#include "dict.h"
+#include "fail.h"
 #include "utils.h"
 
 #include <inttypes.h>
@@ -14,9 +16,6 @@
 
 #define CHUNK_LEN 32
 #define BUFCAP (CHUNK_LEN * 2)
-#define OPCODE_INFO_CAP 256
-#define LABEL_INFO_CAP 1024
-#define REG_INFO_CAP 1024
 
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #define max(x, y) ((x) > (y) ? (x) : (y))
@@ -139,16 +138,50 @@ enum operand_type {
 };
 
 
-struct opcode_info {
-    enum opcode opc;
+struct insn {
     const char* str;
+    enum opcode opc;
     uint16_t word;
     enum operand_type opds[2];
     int kwid;
+} insn_array[512];
+
+
+struct dict insns = {
+    .array = insn_array,
+    .capacity = lengthof(insn_array),
+    .value_len = sizeof(struct insn),
 };
 
 
-struct opcode_info opcode_info_list[] = {
+struct reg {
+    const char* name;
+    unsigned int bank;
+    unsigned int addr;
+} reg_array[2048];
+
+
+struct dict regs = {
+    .array = reg_array,
+    .capacity = lengthof(reg_array),
+    .value_len = sizeof(struct reg),
+};
+
+
+struct label {
+    const char* name;
+    unsigned int addr;
+} label_array[2048];
+
+
+struct dict labels = {
+    .array = label_array,
+    .capacity = lengthof(label_array),
+    .value_len = sizeof(struct label),
+};
+
+
+struct insn insns_ref[] = {
     { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D} },
     { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D} },
     { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D} },
@@ -220,26 +253,10 @@ struct opcode_info opcode_info_list[] = {
 };
 
 
-struct opcode_info* opcode_info[2 * OPCODE_INFO_CAP];
-
-
-struct reg_info {
-    const char* name;
-    unsigned int bank;
-    unsigned int addr;
-} reg_info[2 * REG_INFO_CAP];
-
-
-struct label_info {
-    const char* name;
-    unsigned int addr;
-} label_info[2 * LABEL_INFO_CAP];
-
-
 struct line {
     struct line* next;
 
-    struct opcode_info* oi;
+    struct insn* oi;
     bool star;
 
     const char* label;
@@ -256,7 +273,7 @@ void print_line(struct line* line)
     if (line->oi->opc == C_NONE)
         return;
 
-    struct opcode_info* oi = line->oi;
+    struct insn* oi = line->oi;
 
     if ( !(C_NONE < oi->opc && oi->opc < CD__LAST__) )
         fatal(2, "Not implemented");
@@ -301,88 +318,6 @@ void print_line(struct line* line)
             }
         }
     }
-}
-
-
-// djb2 by Dan Bernstein
-static
-unsigned long hash(const char* str)
-{
-    unsigned long hash = 5381;
-    int c;
-
-    while ((c = *(str++)))
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-    return hash;
-}
-
-
-static
-void opcode_info_init()
-{
-    for (unsigned int i = 0; i < lengthof(opcode_info); ++i)
-        opcode_info[i] = NULL;
-
-    for (unsigned int i = 0; i < lengthof(opcode_info_list); ++i) {
-        unsigned int h = hash(opcode_info_list[i].str) % OPCODE_INFO_CAP;
-        while (opcode_info[h] != NULL)
-            ++h;
-        opcode_info[h] = &opcode_info_list[i];
-    }
-}
-
-
-static
-struct opcode_info* opcode_info_get(const char* const opcode)
-{
-    unsigned int h = hash(opcode) % OPCODE_INFO_CAP;
-    while (true) {
-        if (h >= lengthof(opcode_info) || opcode_info[h] == NULL)
-            return NULL;
-        if (strcmp(opcode, opcode_info[h]->str) == 0)
-            break;
-        ++h;
-    }
-
-    return opcode_info[h];
-}
-
-
-static
-void label_info_init()
-{
-    for (unsigned int i = 0; i < lengthof(label_info); ++i)
-        label_info[i].name = NULL;
-}
-
-
-static
-struct label_info* label_info_avail(const char* const label)
-{
-    unsigned int h = hash(label) % LABEL_INFO_CAP;
-    while (label_info[h].name != NULL) {
-        ++h;
-        if (h >= lengthof(label_info))
-            fatal(1, "Label dict is full");
-    }
-    return &label_info[h];
-}
-
-
-static
-struct label_info* label_info_get(const char* const name)
-{
-    unsigned int h = hash(name) % LABEL_INFO_CAP;
-    while (true) {
-        if (h >= lengthof(label_info) || label_info[h].name == NULL)
-            return NULL;
-        if (strcmp(label_info[h].name, name) == 0)
-            break;
-        ++h;
-    }
-
-    return &label_info[h];
 }
 
 
@@ -649,8 +584,7 @@ struct line* parse_line(struct line* const prev_line,
 
 
     line->star = (token->text[0] == '*');
-    struct opcode_info* oi = opcode_info_get(
-        token->text + (line->star ? 1 : 0));
+    struct insn* oi = dict_get(&insns, token->text + (line->star ? 1 : 0));
     if (oi == NULL)
         fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
     ++token;
@@ -762,9 +696,9 @@ struct line* parse_line(struct line* const prev_line,
 static
 struct line* assemble_pass1(struct line* start)
 {
-    label_info_init();
+    dict_init(&labels);
 
-    struct opcode_info* oi_goto = opcode_info_get("goto");
+    struct insn* oi_goto = dict_get(&insns, "goto");
 
     int addr = 0;
     struct line* prev = NULL;
@@ -783,14 +717,14 @@ struct line* assemble_pass1(struct line* start)
 
         // Store label info.
         if (line->label != NULL) {
-            struct label_info* li = label_info_avail(line->label);
+            struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
         }
 
         // Handle bra.
         if (opc == C_BRA) {
-            struct label_info* li = label_info_get(line->opds[0].s);
+            struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
                 if ((addr + 1) - li->addr > 255) // reverse limit
                     line->oi = oi_goto;
@@ -821,9 +755,9 @@ struct line* assemble_pass1(struct line* start)
 static
 struct line* assemble_pass2(struct line* start, int* len)
 {
-    label_info_init();
+    dict_init(&labels);
 
-    struct opcode_info* oi_goto = opcode_info_get("goto");
+    struct insn* oi_goto = dict_get(&insns, "goto");
 
     int addr = 0;
     struct line* prev = NULL;
@@ -833,7 +767,7 @@ struct line* assemble_pass2(struct line* start, int* len)
 
         // Store label info.
         if (line->label != NULL) {
-            struct label_info* li = label_info_avail(line->label);
+            struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
             v2("label %s = %i", li->name, li->addr);
@@ -841,7 +775,7 @@ struct line* assemble_pass2(struct line* start, int* len)
 
         // Handle bra.
         if (opc == C_BRA) {
-            struct label_info* li = label_info_get(line->opds[0].s);
+            struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
                 if ((addr - 1) - li->addr > 256) // forward limit
                     line->oi = oi_goto;
@@ -881,20 +815,20 @@ struct line* assemble_pass3(struct line* start, int len)
 
         // Store label info.
         if (line->label != NULL) {
-            struct label_info* li = label_info_avail(line->label);
+            struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
         }
 
         // Handle bra.
         if (opc == C_BRA) {
-            struct label_info* li = label_info_get(line->opds[0].s);
+            struct label* li = dict_get(&labels, line->opds[0].s);
             if (li == NULL)
                 fatal(E_RARE, "Target should not be unknown");
             line->opds[0].s = NULL;
             line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
         } else if (opc == C_GOTO || opc == C_CALL) {
-            struct label_info* li = label_info_get(line->opds[0].s);
+            struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
                 line->opds[0].s = NULL;
                 line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
@@ -986,11 +920,11 @@ void dump_hex(struct line* start, int len)
     int addr = 0;
     struct line* line = start;
     while (line != NULL) {
-        int insn_count = (len - addr >= 8) ? 8 : len - addr;
+        int line_count = (len - addr >= 8) ? 8 : len - addr;
         union unsign8 sum;
-        sum.i = insn_count * 2 + addr * 2;
-        printf(":%02X%04X00", insn_count * 2, addr * 2);
-        for (int i = 0; i < insn_count; ++i) {
+        sum.i = line_count * 2 + addr * 2;
+        printf(":%02X%04X00", line_count * 2, addr * 2);
+        for (int i = 0; i < line_count; ++i) {
             if (verbosity >= 2) {
                 print_line(line);
                 putchar('\n');
@@ -1017,7 +951,10 @@ void assemble_P16(const int src)
     struct line* start = NULL;
     struct line* prev_line = NULL;
 
-    opcode_info_init();
+    dict_init(&insns);
+    for (unsigned int i = 0; i < lengthof(insns_ref); ++i)
+        *(struct insn*)(dict_avail(&insns, insns_ref[i].str)) = insns_ref[i];
+
 
     char* label = NULL;
     for (unsigned int l = 1; /* */; ++l) {

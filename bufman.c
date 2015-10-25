@@ -1,4 +1,6 @@
+#include "common.h"
 #include "bufman.h"
+
 
 #include <string.h>
 #include <unistd.h>
