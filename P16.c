@@ -253,7 +253,7 @@ struct insn insns_ref[] = {
 
     { .opc = CD_SFR, .str = ".sfr", .opds = {F, I} },
     { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
-    { .opc = CD_REG, .str = ".reg", .opds = {A, I} },
+    { .opc = CD_REG, .str = ".reg", .opds = {I, 0} },
     { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
 };
 
@@ -737,7 +737,7 @@ struct line* assemble_pass1(struct line* start)
             reg->addr = line->opds[0].i & 0x7F;
             reg->name = line->opds[1].s;
         } else if (opc == CD_REG) {
-            struct reg* reg = dict_avail(&regs, line->opds[1].s);
+            struct reg* reg = dict_avail(&regs, line->opds[0].s);
             reg->bank = autobank;
             reg->addr = autoaddr;
             reg->name = line->opds[0].s;
