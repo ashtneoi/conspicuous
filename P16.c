@@ -171,6 +171,19 @@ struct dict regs = {
 };
 
 
+struct sreg {
+    const char* name;
+    unsigned int addr;
+} sreg_array[128];
+
+
+struct dict sregs = {
+    .array = sreg_array,
+    .capacity = lengthof(sreg_array),
+    .value_len = sizeof(struct sreg),
+};
+
+
 struct label {
     const char* name;
     unsigned int addr;
@@ -255,6 +268,22 @@ struct insn insns_ref[] = {
     { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
     { .opc = CD_REG, .str = ".reg", .opds = {I, 0} },
     { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
+};
+
+
+struct sreg sregs_ref[] = {
+    { .name = "INDF0", .addr = 0x00 },
+    { .name = "INDF1", .addr = 0x01 },
+    { .name = "PCL", .addr = 0x02 },
+    { .name = "STATUS", .addr = 0x03 },
+    { .name = "FSR0L", .addr = 0x04 },
+    { .name = "FSR0H", .addr = 0x05 },
+    { .name = "FSR1L", .addr = 0x06 },
+    { .name = "FSR1H", .addr = 0x07 },
+    { .name = "BSR", .addr = 0x08 },
+    { .name = "WREG", .addr = 0x09 },
+    { .name = "PCLATH", .addr = 0x0A },
+    { .name = "INTCON", .addr = 0x0B },
 };
 
 
@@ -714,6 +743,9 @@ struct line* assemble_pass1(struct line* start)
 
     dict_init(&labels);
     dict_init(&regs);
+    dict_init(&sregs);
+    for (unsigned int i = 0; i < lengthof(sregs_ref); ++i)
+        *(struct sreg*)dict_avail(&sregs, sregs_ref[i].name) = sregs_ref[i];
 
     struct insn* oi_goto = dict_get(&insns, "goto");
     struct insn* oi_movlb = dict_get(&insns, "movlb");
@@ -765,21 +797,26 @@ struct line* assemble_pass1(struct line* start)
         );
         if (is_f && line->opds[0].s != NULL) {
             struct reg* reg = dict_get(&regs, line->opds[0].s);
-            if (reg == NULL)
-                fatal(E_COMMON, "Unknown register name");
-            line->opds[0].s = NULL;
-            line->opds[0].i = reg->addr;
-            if (reg->bank != bank) {
-                struct line* new = malloc(sizeof(struct line));
-                new->next = prev;
-                prev = new;
-                new->oi = oi_movlb;
-                new->star = false;
-                new->label = NULL;
-                new->opds[0].i = reg->bank;
+            if (reg == NULL) {
+                struct sreg* sreg = dict_get(&sregs, line->opds[0].s);
+                if (sreg == NULL)
+                    fatal(E_COMMON, "Unknown register name");
+                line->opds[0].i = sreg->addr;
+            } else {
+                line->opds[0].i = reg->addr;
+                if (reg->bank != bank) {
+                    struct line* new = malloc(sizeof(struct line));
+                    new->next = prev;
+                    prev = new;
+                    new->oi = oi_movlb;
+                    new->star = false;
+                    new->label = NULL;
+                    new->opds[0].i = reg->bank;
 
-                bank = reg->bank;
+                    bank = reg->bank;
+                }
             }
+            line->opds[0].s = NULL;
         }
 
         // Handle bra.
@@ -1015,7 +1052,7 @@ void assemble_P16(const int src)
 
     dict_init(&insns);
     for (unsigned int i = 0; i < lengthof(insns_ref); ++i)
-        *(struct insn*)(dict_avail(&insns, insns_ref[i].str)) = insns_ref[i];
+        *(struct insn*)dict_avail(&insns, insns_ref[i].str) = insns_ref[i];
 
 
     char* label = NULL;
