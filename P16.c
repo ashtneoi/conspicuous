@@ -742,7 +742,7 @@ struct line* assemble_pass1(struct line* start)
             reg->addr = autoaddr;
             reg->name = line->opds[0].s;
             if (++autoaddr > ((autobank == autobankmax)
-                    ? autoaddrmax : 0x7F)) {
+                    ? autoaddrmax : 0x6F)) {
                 if (++autobank > autobankmax)
                     fatal(E_COMMON,
                         "Can't allocate register because GPR is full");
