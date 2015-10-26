@@ -8,6 +8,7 @@
 #include "utils.h"
 
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <string.h>
 #include <strings.h>
@@ -115,6 +116,8 @@ enum opcode {
     C_TRIS,
     C__LAST__,
 
+    CD_SFR,
+    CD_GPR,
     CD_REG,
     CD_CREG,
     CD__LAST__,
@@ -248,6 +251,8 @@ struct insn insns_ref[] = {
     { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
     { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
 
+    { .opc = CD_SFR, .str = ".sfr", .opds = {F, I} },
+    { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
     { .opc = CD_REG, .str = ".reg", .opds = {A, I} },
     { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
 };
@@ -617,9 +622,15 @@ struct line* parse_line(struct line* const prev_line,
                 opd->i = token->num;
                 opd->s = NULL;
             } else {
-                if (token->type != T_TEXT)
-                    fatal(1, "line %u: Expected register name", l);
-                opd->s = token->text;
+                if (token->type == T_TEXT) {
+                    opd->s = token->text;
+                } else if (token->type == T_NUMBER) {
+                    opd->s = NULL;
+                    opd->i = token->num;
+                } else {
+                    fatal(1, "line %u: Expected register name or traditional "
+                        "register address " , l);
+                }
             }
         } else if (oi->opds[i] == B) {
             if (token->type == T_NUMBER) {
@@ -696,30 +707,79 @@ struct line* parse_line(struct line* const prev_line,
 static
 struct line* assemble_pass1(struct line* start)
 {
+    int autobank;
+    int autoaddr;
+    int autobankmax;
+    int autoaddrmax;
+
     dict_init(&labels);
+    dict_init(&regs);
 
     struct insn* oi_goto = dict_get(&insns, "goto");
+    struct insn* oi_movlb = dict_get(&insns, "movlb");
 
     int addr = 0;
+    unsigned int bank = UINT_MAX;
     struct line* prev = NULL;
     struct line* line = start;
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
 
-        // Resolve register names.
-        bool is_f = (
-            (C_ADDWF <= opc && opc <= C_LSRF) ||
-            (C_COMF <= opc && opc <= C_BTFSS)
-        );
-        if (is_f && line->opds[0].s != NULL)
-            fatal(E_RARE, "Register name resolution and bank auto-switching "
-                "not implemented");
+        // Handle directives.
+        if (opc == CD_GPR) {
+            autobank = line->opds[0].i >> 7;
+            autoaddr = line->opds[0].i & 0x7F;
+            autobankmax = line->opds[1].i >> 7;
+            autoaddrmax = line->opds[1].i & 0x7F;
+        } else if (opc == CD_SFR) {
+            struct reg* reg = dict_avail(&regs, line->opds[1].s);
+            reg->bank = line->opds[0].i >> 7;
+            reg->addr = line->opds[0].i & 0x7F;
+            reg->name = line->opds[1].s;
+        } else if (opc == CD_REG) {
+            struct reg* reg = dict_avail(&regs, line->opds[1].s);
+            reg->bank = autobank;
+            reg->addr = autoaddr;
+            reg->name = line->opds[0].s;
+            if (++autoaddr > ((autobank == autobankmax)
+                    ? autoaddrmax : 0x7F)) {
+                if (++autobank > autobankmax)
+                    fatal(E_COMMON,
+                        "Can't allocate register because GPR is full");
+                autoaddr = 0x20;
+            }
+        }
 
         // Store label info.
         if (line->label != NULL) {
             struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
+            bank = UINT_MAX;
+        }
+
+        // Resolve register names.
+        bool is_f = (
+            (C_ADDWF <= opc && opc <= C_LSRF) ||
+            (C_COMF <= opc && opc <= C_BTFSS)
+        );
+        if (is_f && line->opds[0].s != NULL) {
+            struct reg* reg = dict_get(&regs, line->opds[0].s);
+            if (reg == NULL)
+                fatal(E_COMMON, "Unknown register name");
+            line->opds[0].s = NULL;
+            line->opds[0].i = reg->addr;
+            if (reg->bank != bank) {
+                struct line* new = malloc(sizeof(struct line));
+                new->next = prev;
+                prev = new;
+                new->oi = oi_movlb;
+                new->star = false;
+                new->label = NULL;
+                new->opds[0].i = reg->bank;
+
+                bank = reg->bank;
+            }
         }
 
         // Handle bra.
@@ -739,8 +799,10 @@ struct line* assemble_pass1(struct line* start)
         // Advance to next line.
         {
             struct line* old_next = line->next;
-            line->next = prev;
-            prev = line;
+            if ( !(C__LAST__ < opc && opc <= CD__LAST__) ) {
+                line->next = prev;
+                prev = line;
+            }
             line = old_next;
         }
     }
