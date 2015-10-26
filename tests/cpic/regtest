@@ -1,0 +1,7 @@
+        .gpr 0x20, 0xEF
+        .sfr 0x11F, X1
+        .reg X2
+        movlw 0xEE
+        movwf X1
+        movwf X2
+

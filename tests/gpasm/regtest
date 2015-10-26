@@ -1,0 +1,7 @@
+        ORG 0
+        movlw 0xEE
+        movlb 2
+        movwf 0x1F
+        movlb 0
+        movwf 0x20
+        END
