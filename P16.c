@@ -399,6 +399,8 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         } else if (t[1] == 'b' || t[1] == 'n') {
             t += 2;
             toklen -= 2;
+            if (toklen == 0)
+                fatal(1, "Invalid binary number");
 
             token->type = T_NUMBER;
             token->num = 0;
@@ -413,6 +415,8 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         } else if ('0' <= t[1] && t[1] <= '7') {
             ++t;
             --toklen;
+            if (toklen == 0)
+                fatal(1, "Invalid octal number");
 
             token->type = T_NUMBER;
             token->num = t[0] - '0';
@@ -427,6 +431,8 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         } else if (t[1] == 'x') {
             t += 2;
             toklen -= 2;
+            if (toklen == 0)
+                fatal(1, "Invalid hexadecimal number");
 
             for (ssize_t i = 0; i < toklen; ++i) {
                 if ('0' <= t[i] && t[i] <= '9')
@@ -449,6 +455,8 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         if (t[2] == 'b' || t[2] == 'n') {
             t += 3;
             toklen -= 3;
+            if (toklen == 0)
+                fatal(1, "Invalid binary number");
 
             ssize_t gu = ((toklen - 1) % 8) + 1; // group upper bound
             ssize_t i = 0;
@@ -469,6 +477,8 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
         } else if (t[2] == 'x') {
             t += 3;
             toklen -= 3;
+            if (toklen == 0)
+                fatal(1, "Invalid hexadecimal number");
 
             ssize_t gu = ((toklen - 1) % 2) + 1; // group upper bound
             ssize_t i = 0;
@@ -792,7 +802,7 @@ struct line* assemble_pass1(struct line* start)
 
         // Resolve register names.
         bool is_f = (
-            (C_ADDWF <= opc && opc <= C_LSRF) ||
+            (C_ADDWF <= opc && opc <= C_CLRF) ||
             (C_COMF <= opc && opc <= C_BTFSS)
         );
         if (is_f && line->opds[0].s != NULL) {
@@ -1023,7 +1033,7 @@ void dump_hex(struct line* start, int len)
         union unsign8 sum;
         sum.i = line_count * 2 + addr * 2;
         printf(":%02X%04X00", line_count * 2, addr * 2);
-        for (int i = 0; i < line_count; ++i) {
+        for (int i = 0; i < line_count; ++i, ++addr) {
             if (verbosity >= 2) {
                 print_line(line);
                 putchar('\n');
