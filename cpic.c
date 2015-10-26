@@ -19,54 +19,18 @@ const char* progname;
 int verbosity = 0;
 
 
-//
-// constant strings
-//
-
-
 const char* const msg_usage =
-    "Usage:  %s FILE\n"
+    "Usage:  %s [OPTIONS] FILE\n"
     "\n"
     "Arguments:\n"
     "  FILE    the assembly file to read\n"
     "\n"
     "Available options:\n"
-    "  -l\n"
-    "      list supported processors\n"
     "  -h\n"
     "      show this usage text\n"
-    "  -p PROCESSOR\n"
-    "      assemble for the specified processor\n"
     "  -v\n"
     "      increase verbosity (can be passed up to 2 times)\n"
     ;
-
-const char* const msg_processor_not_supported =
-    "Processor \"%s\" is not supported at the moment. Pass the -l option to\n"
-    "see the list of supported processors.\n";
-
-const char* const msg_processor_required =
-    "The -p option is required.\n";
-
-
-//
-// processors
-//
-
-
-enum processor {
-    P16,
-    P_NONE,
-};
-
-const char* const processors[] = {
-    [P16] = "16F1454",
-};
-
-//
-// utility-ish functions
-//
-
 
 void exit_with_usage()
 {
@@ -75,62 +39,21 @@ void exit_with_usage()
 }
 
 
-void exit_with_processors()
+int process_args(int argc, char** argv)
 {
-    fprintf(stderr, "Processors currently supported:\n");
-    for (unsigned int i = 0; i < lengthof(processors); ++i)
-        fprintf(stderr, "  %s\n", processors[i]);
-    exit(E_INFO);
-}
-
-
-struct args {
-    enum processor processor;
-    int source_idx;
-} process_args(int argc, char** argv)
-{
-    struct args args = {
-        .processor = P_NONE,
-    };
-
     while (true) {
-        int c = getopt(argc, argv, "lhp:v");
+        int c = getopt(argc, argv, "hv");
         if (c == -1) {
             break;
-        } else if (c == 'l') {
-            exit_with_processors();
         } else if (c == 'h') {
             exit_with_usage();
-        } else if (c == 'p') {
-            unsigned int i;
-            for (i = 0; i < lengthof(processors); ++i)
-                if (0 == strcmp(optarg, processors[i]))
-                    break;
-            if (i == lengthof(processors)) {
-                fprintf(stderr, msg_processor_not_supported, optarg);
-                exit(E_ARG);
-            }
-
-            args.processor = i;
         } else if (c == 'v') {
             ++verbosity;
         }
     }
 
-    if (args.processor == P_NONE) {
-        fputs(msg_processor_required, stderr);
-        exit(E_ARG);
-    }
-
-    args.source_idx = optind;
-
-    return args;
+    return optind;
 }
-
-
-//
-// everything else
-//
 
 
 int main(int argc, char** argv)
@@ -142,28 +65,23 @@ int main(int argc, char** argv)
     if (argc < 2)
         exit_with_usage();
 
-    struct args args = process_args(argc, argv);
+    int source_idx = process_args(argc, argv);
 
     // Get ready to read the source file.
 
-    if (argv[args.source_idx] == NULL)
+    if (source_idx >= argc)
         fatal(E_COMMON, "No file specified");
 
     v2("Opening source file");
-    int src = open(argv[args.source_idx], O_RDONLY);
+    int src = open(argv[source_idx], O_RDONLY);
     if (src < 0)
-        fatal_e(E_COMMON, "Can't open file \"%s\"", argv[args.source_idx]);
+        fatal_e(E_COMMON, "Can't open file \"%s\"", argv[source_idx]);
 
     // Assemble the source file.
 
-    switch (args.processor) {
-    case P16:
-        assemble_P16(src);
-        break;
-    case P_NONE:
-        fatal(E_RARE, "This should never happen!");
-        break;
-    }
+    assemble_P16(src);
+
+    // Clean up and exit.
 
     close(src); // (Ignore errors.)
     return 0;
