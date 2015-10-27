@@ -234,7 +234,7 @@ struct insn insns_ref[] = {
         .kwid = 8 },
     { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {K, 0},
+    { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {F, 0},
         .kwid = 5 },
     { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, 0},
         .kwid = 7 },
@@ -828,6 +828,18 @@ struct line* assemble_pass1(struct line* start)
                 line->opds[0].s = NULL;
             } else {
                 line->opds[0].i &= 0x7F;
+            }
+        }
+
+        if (opc == C_MOVLB) {
+            if (line->opds[0].s != NULL) {
+                struct reg* reg = dict_get(&regs, line->opds[0].s);
+                if (reg == NULL)
+                    fatal(E_COMMON, "Unknown register name");
+                line->opds[0].i = reg->bank;
+                line->opds[0].s = NULL;
+            } else {
+                line->opds[0].i >>= 7;
             }
         }
 
