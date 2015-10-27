@@ -850,7 +850,7 @@ struct line* assemble_pass1(struct line* start)
 
         // Increment address.
         if ( !(C__LAST__ < opc && opc <= CD__LAST__) )
-            ++addr;
+            addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
 
         // Advance to next line.
         {
@@ -934,7 +934,7 @@ struct line* assemble_pass2(struct line* start, int* len)
 
 //// A3 (forward) ////
 // [*]bra : resolve
-// goto, call : resolve relative (XXX: currently absolute) if target stored
+// goto, call : resolve relative if target stored
 static
 struct line* assemble_pass3(struct line* start, int len)
 {
@@ -1020,14 +1020,14 @@ struct line* link_pass2(struct line* start)
             new->label = line->label;
 
             ++addr;
-            int target = addr + line->opds[0].i + 1;
+            int target = addr + line->opds[0].i;
             new->opds[0].i = target >> 8;
             line->opds[0].i = target & ((1 << 11) - 1);
 
             line->label = NULL;
 
             if (verbosity >= 1) {
-                printf("[0x%04X] ", addr);
+                printf("[0x%04X] ", addr - 1);
                 print_line(new);
                 putchar('\n');
             }
@@ -1040,7 +1040,7 @@ struct line* link_pass2(struct line* start)
         }
 
         // Increment addr.
-        addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
+        ++addr;
 
         // Advance to next line.
         prev = line;
