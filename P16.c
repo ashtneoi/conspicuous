@@ -17,6 +17,7 @@
 
 #define CHUNK_LEN 32
 #define BUFCAP (CHUNK_LEN * 2)
+#define CFG_MEM_SIZE 0x10
 
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #define max(x, y) ((x) > (y) ? (x) : (y))
@@ -120,6 +121,7 @@ enum opcode {
     CD_GPR,
     CD_REG,
     CD_CREG,
+    CD_CFG,
     CD__LAST__,
 
     // TODO: Implement more.
@@ -268,6 +270,7 @@ struct insn insns_ref[] = {
     { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
     { .opc = CD_REG, .str = ".reg", .opds = {I, 0} },
     { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
+    { .opc = CD_CFG, .str = ".cfg", .opds = {K, K}, .kwid = 16 },
 };
 
 
@@ -734,8 +737,11 @@ struct line* parse_line(struct line* const prev_line,
 // [*]___f___ : resolve
 // bra : change to goto if target far, star if target near
 static
-struct line* assemble_pass1(struct line* start)
+struct line* assemble_pass1(struct line* start, int16_t* cfg)
 {
+    for (unsigned int i = 0; i < CFG_MEM_SIZE; ++i)
+        cfg[i] = -1;
+
     int autobank;
     int autoaddr;
     int autobankmax;
@@ -780,6 +786,13 @@ struct line* assemble_pass1(struct line* start)
                         "Can't allocate register because GPR is full");
                 autoaddr = 0x20;
             }
+        } else if (opc == CD_CFG) {
+            int addr = line->opds[0].i - 0x8000;
+            if (addr < 0 || addr >= 0xF)
+                fatal(E_COMMON, "Address out of range");
+            if (cfg[addr] >= 0)
+                fatal(E_COMMON, "Configuration word already set");
+            cfg[addr] = line->opds[1].i;
         }
 
         // Store label info.
@@ -1110,19 +1123,13 @@ uint16_t dump_line(struct line* line)
 }
 
 
-void dump_hex(struct line* start, int len)
+void dump_hex(struct line* start, int len, int16_t* cfg)
 {
-    union unsign8 {
-        uint8_t u;
-        int8_t i;
-    };
-
     int addr = 0;
     struct line* line = start;
     while (line != NULL) {
         int line_count = (len - addr >= 8) ? 8 : len - addr;
-        union unsign8 sum;
-        sum.i = line_count * 2 + addr * 2;
+        uint8_t sum = line_count * 2 + addr * 2;
         printf(":%02X%04X00", line_count * 2, addr * 2);
         for (int i = 0; i < line_count; ++i, ++addr) {
             if (verbosity >= 2) {
@@ -1133,11 +1140,21 @@ void dump_hex(struct line* start, int len)
             printf("%02"PRIX8"%02"PRIX8, line_bin & 0xFF, line_bin >> 8);
             if (verbosity >= 2)
                 putchar('\n');
-            sum.u += (line_bin & 0xFF) + (line_bin >> 8);
+            sum += (line_bin & 0xFF) + (line_bin >> 8);
             line = line->next;
         }
-        sum.i = -sum.i;
-        printf("%02"PRIX8"\n", sum.u);
+        printf("%02X\n", (uint8_t)-sum);
+    }
+
+    print(":020000040001F9\n");
+    for (unsigned int a = 0; a < CFG_MEM_SIZE; ++a) {
+        if (cfg[a] < 0)
+            continue;
+        int data_hi = cfg[a] >> 8;
+        int data_lo = cfg[a] & 0xFF;
+        uint8_t sum = 2 + a + data_hi + data_lo;
+        printf(":02%04X00%02X%02X%02X\n", a, data_lo, data_hi,
+            (uint8_t)-sum);
     }
     print(":00000001FF\n");
 }
@@ -1154,7 +1171,6 @@ void assemble_P16(const int src)
     dict_init(&insns);
     for (unsigned int i = 0; i < lengthof(insns_ref); ++i)
         *(struct insn*)dict_avail(&insns, insns_ref[i].str) = insns_ref[i];
-
 
     char* label = NULL;
     for (unsigned int l = 1; /* */; ++l) {
@@ -1174,11 +1190,12 @@ void assemble_P16(const int src)
     }
 
     int len;
-    start = assemble_pass1(start);
+    int16_t cfg[CFG_MEM_SIZE];
+    start = assemble_pass1(start, cfg);
     start = assemble_pass2(start, &len);
     start = assemble_pass3(start, len);
     start = link_pass1(start);
     start = link_pass2(start);
 
-    dump_hex(start, len);
+    dump_hex(start, len, cfg);
 }
