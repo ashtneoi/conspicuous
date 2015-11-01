@@ -268,7 +268,7 @@ struct insn insns_ref[] = {
 
     { .opc = CD_SFR, .str = ".sfr", .opds = {F, I} },
     { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
-    { .opc = CD_REG, .str = ".reg", .opds = {I, 0} },
+    { .opc = CD_REG, .str = ".reg", .opds = {A, I} },
     { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
     { .opc = CD_CFG, .str = ".cfg", .opds = {K, K}, .kwid = 16 },
 };
@@ -744,8 +744,8 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
     for (unsigned int i = 0; i < CFG_MEM_SIZE; ++i)
         cfg[i] = -1;
 
-    int autobank;
-    int autoaddr;
+    int* autoaddr = NULL;
+    int autobankmin;
     int autobankmax;
     int autoaddrmax;
 
@@ -767,9 +767,13 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
         // Handle directives.
         if (opc == CD_GPR) {
-            autobank = line->opds[0].i >> 7;
-            autoaddr = line->opds[0].i & 0x7F;
+            autobankmin = line->opds[0].i >> 7;
             autobankmax = line->opds[1].i >> 7;
+
+            autoaddr = malloc((autobankmax - autobankmin + 1) * sizeof(int));
+            autoaddr[0] = line->opds[0].i & 0x7F;
+            for (int b = 1; b < autobankmax - autobankmin + 1; ++b)
+                autoaddr[b] = 0x20;
             autoaddrmax = line->opds[1].i & 0x7F;
         } else if (opc == CD_SFR) {
             struct reg* reg = dict_avail(&regs, line->opds[1].s);
@@ -777,17 +781,19 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             reg->addr = line->opds[0].i & 0x7F;
             reg->name = line->opds[1].s;
         } else if (opc == CD_REG) {
-            struct reg* reg = dict_avail(&regs, line->opds[0].s);
-            reg->bank = autobank;
-            reg->addr = autoaddr;
-            reg->name = line->opds[0].s;
-            if (++autoaddr > ((autobank == autobankmax)
-                    ? autoaddrmax : 0x6F)) {
-                if (++autobank > autobankmax)
-                    fatal(E_COMMON,
-                        "Can't allocate register because GPR is full");
-                autoaddr = 0x20;
-            }
+            int b = line->opds[0].i;
+            if ( !(autobankmin <= b && b <= autobankmax) )
+                fatal(E_COMMON, "Bank number %d out of range", b);
+            int* a = &(autoaddr[b - autobankmin]);
+            if (*a > 0x6F || (b == autobankmax && *a > autoaddrmax))
+                fatal(E_COMMON, "No GPR left in bank %d", b);
+
+            struct reg* reg = dict_avail(&regs, line->opds[1].s);
+            reg->bank = b;
+            reg->addr = *a;
+            reg->name = line->opds[1].s;
+
+            ++*a;
         } else if (opc == CD_CFG) {
             int addr = line->opds[0].i - 0x8000;
             if (addr < 0 || addr >= 0xF)
