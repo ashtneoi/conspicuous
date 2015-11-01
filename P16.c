@@ -388,7 +388,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
             if ('0' <= t[i] && t[i] <= '9')
                 token->num = token->num * 10 +
                     t[i] - '0';
-            else
+            else if (t[i] != '_')
                 fatal(1, "Invalid decimal number");
         }
         ++token;
@@ -411,7 +411,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                 if ('0' <= t[i] && t[i] <= '1')
                     token->num = token->num * 2 +
                         t[i] - '0';
-                else
+                else if (t[i] != '_')
                     fatal(1, "Invalid binary number");
             }
             ++token;
@@ -427,7 +427,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                 if ('0' <= t[i] && t[i] <= '7')
                     token->num = token->num * 8 +
                         t[i] - '0';
-                else
+                else if (t[i] != '_')
                     fatal(1, "Invalid octal number");
             }
             ++token;
@@ -447,7 +447,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                 else if ('a' <= t[i] && t[i] <= 'f')
                     token->num = token->num * 16 +
                         t[i] - 'a' + 10;
-                else
+                else if (t[i] != '_')
                     fatal(1, "Invalid hexadecimal number");
             }
             ++token;
@@ -470,7 +470,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                     if ('0' <= t[i] && t[i] <= '1')
                         token->num = token->num * 2 +
                             t[i] - '0';
-                    else
+                    else if (t[i] != '_')
                         fatal(1, "Invalid binary number");
                 }
                 ++token;
@@ -498,7 +498,7 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
                     else if ('a' <= t[i] && t[i] <= 'f')
                         token->num = token->num * 16 +
                             t[i] - 'a' + 10;
-                    else
+                    else if (t[i] != '_')
                         fatal(1, "Invalid hexadecimal number");
                 }
                 ++token;
