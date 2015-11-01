@@ -15,7 +15,7 @@
 #include <sys/types.h>
 
 
-#define CHUNK_LEN 32
+#define CHUNK_LEN 128
 #define BUFCAP (CHUNK_LEN * 2)
 #define CFG_MEM_SIZE 0x10
 
