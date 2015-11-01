@@ -1,0 +1,2 @@
+(2015-11-01) Make integer signedness more consistent
+(2015-11-01) Require .reg to include bank number
