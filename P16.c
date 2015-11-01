@@ -813,7 +813,8 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                 if (reg == NULL) {
                     struct sreg* sreg = dict_get(&sregs, line->opds[0].s);
                     if (sreg == NULL)
-                        fatal(E_COMMON, "Unknown register name");
+                        fatal(E_COMMON, "Unknown register name \"%s\"",
+                            line->opds[0].s);
                     line->opds[0].i = sreg->addr;
                 } else {
                     line->opds[0].i = reg->addr;
@@ -847,7 +848,8 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             if (line->opds[0].s != NULL) {
                 struct reg* reg = dict_get(&regs, line->opds[0].s);
                 if (reg == NULL)
-                    fatal(E_COMMON, "Unknown register name");
+                    fatal(E_COMMON, "Unknown register name \"%s\"",
+                        line->opds[0].s);
                 line->opds[0].i = reg->bank;
                 line->opds[0].s = NULL;
             } else {
