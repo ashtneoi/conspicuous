@@ -685,15 +685,14 @@ struct line* parse_line(struct line* const prev_line,
             opd->i = token->num;
             opd->s = NULL;
         } else if (oi->opds[i] == L) {
-            if (line->star) {
-                if (token->type != T_NUMBER)
-                    fatal(1, "line %u: Expected program address", l);
+            if (token->type == T_NUMBER) {
                 opd->i = token->num;
                 opd->s = NULL;
-            } else {
-                if (token->type != T_TEXT)
-                    fatal(1, "line %u: Expected program label", l);
+                    fatal(1, "line %u: Expected program address", l);
+            } else if (token->type == T_TEXT) {
                 opd->s = token->text;
+            } else {
+                fatal(1, "line %u: Expected program label or address", l);
             }
         } else if (oi->opds[i] == D) {
             if (token->type != T_NUMBER)
@@ -860,10 +859,13 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         if (opc == C_BRA) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
-                if ((addr + 1) - li->addr > 255) // reverse limit
+                if ((addr + 1) - li->addr > 255) { // reverse limit
+                    if (line->star)
+                        fatal(E_COMMON, "Target out of range");
                     line->oi = oi_goto;
-                else
+                } else {
                     line->star = true;
+                }
             }
         }
 
@@ -923,10 +925,13 @@ struct line* assemble_pass2(struct line* start, int* len)
         if (opc == C_BRA) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
-                if ((addr - 1) - li->addr > 256) // forward limit
+                if ((addr - 1) - li->addr > 256) { // forward limit
+                    if (line->star)
+                        fatal(E_COMMON, "Target out of range");
                     line->oi = oi_goto;
-                else
+                } else {
                     line->star = true;
+                }
             }
         }
 
