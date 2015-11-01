@@ -629,7 +629,6 @@ struct line* parse_line(struct line* const prev_line,
     line->label = *label;
     *label = NULL;
 
-
     line->star = (token->text[0] == '*');
     struct insn* oi = dict_get(&insns, token->text + (line->star ? 1 : 0));
     if (oi == NULL)
@@ -637,6 +636,10 @@ struct line* parse_line(struct line* const prev_line,
     ++token;
 
     line->oi = oi;
+
+    if (line->label != NULL && C__LAST__ < line->oi->opc
+            && line->oi->opc < CD__LAST__)
+        fatal(1, "line %u: Label not allowed on directive", l);
 
     for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
         struct operand* opd = &line->opds[i];
