@@ -827,24 +827,30 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                     line->opds[0].i = sreg->addr;
                 } else {
                     line->opds[0].i = reg->addr;
-                    if (reg->bank != bank && !line->star) {
-                        struct line* new = malloc(sizeof(struct line));
-                        new->next = prev;
-                        new->oi = oi_movlb;
-                        new->label = line->label;
-                        new->star = false;
-                        new->opds[0].i = reg->bank;
+                    if (reg->bank != bank) {
+                        if (line->star) {
+                            if (bank != UINT_MAX)
+                                fatal(E_COMMON,
+                                    "Bank cannot be active; star not allowed");
+                        } else {
+                            struct line* new = malloc(sizeof(struct line));
+                            new->next = prev;
+                            new->oi = oi_movlb;
+                            new->label = line->label;
+                            new->star = false;
+                            new->opds[0].i = reg->bank;
 
-                        if (verbosity >= 1) {
-                            printf("[0x%04X] ", addr);
-                            print_line(new);
-                            putchar('\n');
+                            if (verbosity >= 1) {
+                                printf("[0x%04X] ", addr);
+                                print_line(new);
+                                putchar('\n');
+                            }
+
+                            ++addr;
+                            prev = new;
+                            bank = reg->bank;
+                            line->label = NULL;
                         }
-
-                        ++addr;
-                        prev = new;
-                        bank = reg->bank;
-                        line->label = NULL;
                     }
                 }
                 line->opds[0].s = NULL;

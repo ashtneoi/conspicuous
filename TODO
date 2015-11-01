@@ -1,3 +1,2 @@
 (2015-11-01) Make integer signedness more consistent
 (2015-11-01) Add macros for magic constants
-(2015-11-01) Prevent *___f___ from specifying an inactive bank
