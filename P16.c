@@ -1160,7 +1160,7 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
         int data_hi = cfg[a] >> 8;
         int data_lo = cfg[a] & 0xFF;
         uint8_t sum = 2 + a + data_hi + data_lo;
-        printf(":02%04X00%02X%02X%02"PRIX8"\n", a, data_lo, data_hi,
+        printf(":02%04X00%02X%02X%02"PRIX8"\n", a * 2, data_lo, data_hi,
             (uint8_t)-sum);
     }
     print(":00000001FF\n");
