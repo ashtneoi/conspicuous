@@ -327,7 +327,7 @@ void print_line(struct line* line)
         struct operand* opd = &line->opds[i];
 
         if (i == 1 && oi->opds[1] == D && opd->i == 1)
-            return;
+            break;
 
         if (i == 0)
             putchar(' ');
