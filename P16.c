@@ -302,6 +302,8 @@ struct line {
         int i;
         const char* s;
     } opds[2];
+
+    unsigned int num;
 };
 
 
@@ -355,6 +357,8 @@ void print_line(struct line* line)
             }
         }
     }
+
+    printf("  ; %d", line->num);
 }
 
 
@@ -605,19 +609,19 @@ struct line* parse_line(struct line* const prev_line,
         return prev_line;
 
     if (token->type != T_TEXT)
-        fatal(1, "line %u: Expected label or opcode", l);
+        fatal(1, "%u: Expected label or opcode", l);
 
     v2("Setting label");
     if (token[1].type == T_COLON) {
         if (*label != NULL)
-            fatal(1, "line %u: Instruction already has a label", l);
+            fatal(1, "%u: Instruction already has a label", l);
         *label = token->text;
         token += 2;
         if (token->type == T_NONE) {
             v2("Carrying label to next line");
             return prev_line;
         } else if (token->type != T_TEXT) {
-            fatal(1, "line %u: Expected opcode", l);
+            fatal(1, "%u: Expected opcode", l);
         }
     }
 
@@ -632,14 +636,14 @@ struct line* parse_line(struct line* const prev_line,
     line->star = (token->text[0] == '*');
     struct insn* oi = dict_get(&insns, token->text + (line->star ? 1 : 0));
     if (oi == NULL)
-        fatal(1, "line %u: Invalid opcode \"%s\"", l, token->text);
+        fatal(1, "%u: Invalid opcode \"%s\"", l, token->text);
     ++token;
 
     line->oi = oi;
 
     if (line->label != NULL && C__LAST__ < line->oi->opc
             && line->oi->opc < CD__LAST__)
-        fatal(1, "line %u: Label not allowed on directive", l);
+        fatal(1, "%u: Label not allowed on directive", l);
 
     for (unsigned int i = 0; i < 2 && oi->opds[i] != 0; ++i) {
         struct operand* opd = &line->opds[i];
@@ -651,7 +655,7 @@ struct line* parse_line(struct line* const prev_line,
                     opd->s = NULL;
                     break;
                 } else {
-                    fatal(1, "line %u: Expected comma", l);
+                    fatal(1, "%u: Expected comma", l);
                 }
             }
             ++token;
@@ -664,70 +668,70 @@ struct line* parse_line(struct line* const prev_line,
                 opd->s = NULL;
                 opd->i = token->num;
             } else {
-                fatal(1, "line %u: Expected register name or traditional "
+                fatal(1, "%u: Expected register name or traditional "
                     "register address " , l);
             }
         } else if (oi->opds[i] == B) {
             if (token->type == T_NUMBER) {
                 if (token->num > 7)
-                    fatal(1, "line %u: Bit number out of range", l);
+                    fatal(1, "%u: Bit number out of range", l);
                 opd->i = token->num;
                 opd->s = NULL;
             } else if (token->type == T_TEXT) {
                 if (line->star)
-                    fatal(1, "line %u: Expected bit number", l);
+                    fatal(1, "%u: Expected bit number", l);
                 opd->s = token->text;
             } else {
-                fatal(1, "line %u: Expected bit number or name", l);
+                fatal(1, "%u: Expected bit number or name", l);
             }
         } else if (oi->opds[i] == K) {
             if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected literal", l);
+                fatal(1, "%u: Expected literal", l);
             else if (token->num >= 1<<oi->kwid)
-                fatal(1, "line %u: Literal out of range", l);
+                fatal(1, "%u: Literal out of range", l);
             opd->i = token->num;
             opd->s = NULL;
         } else if (oi->opds[i] == L) {
             if (token->type == T_NUMBER) {
                 opd->i = token->num;
                 opd->s = NULL;
-                    fatal(1, "line %u: Expected program address", l);
+                    fatal(1, "%u: Expected program address", l);
             } else if (token->type == T_TEXT) {
                 opd->s = token->text;
             } else {
-                fatal(1, "line %u: Expected program label or address", l);
+                fatal(1, "%u: Expected program label or address", l);
             }
         } else if (oi->opds[i] == D) {
             if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected destination select", l);
+                fatal(1, "%u: Expected destination select", l);
             else if (token->num > 1)
-                fatal(1, "line %u: Destination select out of range", l);
+                fatal(1, "%u: Destination select out of range", l);
             opd->i = token->num;
             opd->s = NULL;
         } else if (oi->opds[i] == T) {
             if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected number", l); // TODO: Fix error.
+                fatal(1, "%u: Expected number", l); // TODO: Fix error.
             if (token->num < 5 || 7 < token->num)
-                fatal(1, "line %u: Port %"PRIu16" out of range", l,
+                fatal(1, "%u: Port %"PRIu16" out of range", l,
                     token->num);
             opd->i = token->num; // TODO: Verify or fix this.
             opd->s = NULL;
         } else if (oi->opds[i] == A) {
             // TODO: Implement additional restrictions.
             if (token->type != T_NUMBER)
-                fatal(1, "line %u: Expected bank number", l);
+                fatal(1, "%u: Expected bank number", l);
             opd->i = token->num;
             opd->s = NULL;
         } else if (oi->opds[i] == I) {
             if (token->type != T_TEXT)
-                fatal(1, "line %u: Expected unused identifier", l);
+                fatal(1, "%u: Expected unused identifier", l);
             opd->s = token->text;
         }
         ++token;
     }
 
     if (token->type != T_NONE)
-        fatal(1, "line %u: Trailing tokens", l);
+        fatal(1, "%u: Trailing tokens", l);
 
     return line;
 }
@@ -783,10 +787,11 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         } else if (opc == CD_REG) {
             int b = line->opds[0].i;
             if ( !(autobankmin <= b && b <= autobankmax) )
-                fatal(E_COMMON, "Bank number %d out of range", b);
+                fatal(E_COMMON, "%u: Bank number %d out of range", line->num,
+                    b);
             int* a = &(autoaddr[b - autobankmin]);
             if (*a > 0x6F || (b == autobankmax && *a > autoaddrmax))
-                fatal(E_COMMON, "No GPR left in bank %d", b);
+                fatal(E_COMMON, "%u: No GPR left in bank %d", line->num, b);
 
             struct reg* reg = dict_avail(&regs, line->opds[1].s);
             reg->bank = b;
@@ -797,9 +802,10 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         } else if (opc == CD_CFG) {
             int addr = line->opds[0].i - 0x8000;
             if (addr < 0 || addr >= 0xF)
-                fatal(E_COMMON, "Address out of range");
+                fatal(E_COMMON, "%u: Address out of range", line->num);
             if (cfg[addr] >= 0)
-                fatal(E_COMMON, "Configuration word already set");
+                fatal(E_COMMON, "%u: Configuration word already set",
+                    line->num);
             cfg[addr] = line->opds[1].i;
         }
 
@@ -822,8 +828,8 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                 if (reg == NULL) {
                     struct sreg* sreg = dict_get(&sregs, line->opds[0].s);
                     if (sreg == NULL)
-                        fatal(E_COMMON, "Unknown register name \"%s\"",
-                            line->opds[0].s);
+                        fatal(E_COMMON, "%u: Unknown register name",
+                            line->num);
                     line->opds[0].i = sreg->addr;
                 } else {
                     line->opds[0].i = reg->addr;
@@ -831,7 +837,9 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                         if (line->star) {
                             if (bank != UINT_MAX)
                                 fatal(E_COMMON,
-                                    "Bank cannot be active; star not allowed");
+                                    "%u: Bank %d is active; star prevents "
+                                    "changing to bank %d", line->num, bank,
+                                    reg->bank);
                         } else {
                             struct line* new = malloc(sizeof(struct line));
                             new->next = prev;
@@ -863,13 +871,11 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             if (line->opds[0].s != NULL) {
                 struct reg* reg = dict_get(&regs, line->opds[0].s);
                 if (reg == NULL)
-                    fatal(E_COMMON, "Unknown register name \"%s\"",
-                        line->opds[0].s);
+                    fatal(E_COMMON, "%u: Unknown register name", line->num);
                 line->opds[0].i = reg->bank;
                 line->opds[0].s = NULL;
-            } else {
-                line->opds[0].i >>= 7;
             }
+            bank = line->opds[0].i;
         }
 
         // Handle bra.
@@ -878,7 +884,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             if (li != NULL) {
                 if ((addr + 1) - li->addr > 255) { // reverse limit
                     if (line->star)
-                        fatal(E_COMMON, "Target out of range");
+                        fatal(E_COMMON, "%u: Target out of range", line->num);
                     line->oi = oi_goto;
                 } else {
                     line->star = true;
@@ -944,7 +950,7 @@ struct line* assemble_pass2(struct line* start, int* len)
             if (li != NULL) {
                 if ((addr - 1) - li->addr > 256) { // forward limit
                     if (line->star)
-                        fatal(E_COMMON, "Target out of range");
+                        fatal(E_COMMON, "%u: Target out of range", line->num);
                     line->oi = oi_goto;
                 } else {
                     line->star = true;
@@ -1001,7 +1007,7 @@ struct line* assemble_pass3(struct line* start, int len)
         if (opc == C_BRA) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li == NULL)
-                fatal(E_RARE, "Target should not be unknown");
+                fatal(E_RARE, "%u: Target should not be unknown", line->num);
             line->opds[0].s = NULL;
             line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
         } else if (opc == C_GOTO || opc == C_CALL) {
@@ -1110,7 +1116,7 @@ uint16_t dump_line(struct line* line)
     if (type == 0)
         return word;
     if (line->opds[0].s != NULL)
-        fatal(E_RARE, "Unresolved symbol");
+        fatal(E_RARE, "%u: Unresolved symbol", line->num);
     uint16_t num = line->opds[0].i;
 
     switch (line->oi->opds[0]) {
@@ -1130,7 +1136,7 @@ uint16_t dump_line(struct line* line)
     if (type == 0)
         return word;
     if (line->opds[1].s != NULL)
-        fatal(E_RARE, "Unresolved symbol");
+        fatal(E_RARE, "%u: Unresolved symbol", line->num);
     num = line->opds[1].i;
     switch (line->oi->opds[1]) {
         case B:
@@ -1206,6 +1212,8 @@ void assemble_P16(const int src)
         if (buflen == 0)
             break;
         struct line* line = parse_line(prev_line, tokens, l, &label);
+        if (line != NULL)
+            line->num = l;
         if (start == NULL && line != NULL)
             start = line;
         prev_line = line;
