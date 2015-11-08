@@ -766,7 +766,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
     struct insn* oi_movlb = dict_get(&insns, "movlb");
 
     int addr = 0;
-    int bank = INT_MAX;
+    int bsr = INT_MAX;
     struct line* prev = NULL;
     struct line* line = start;
     while (line != NULL) {
@@ -817,7 +817,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
-            bank = INT_MAX;
+            bsr = INT_MAX;
         }
 
         // Resolve register names.
@@ -836,12 +836,12 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                     line->opds[0].i = sreg->addr;
                 } else {
                     line->opds[0].i = reg->addr;
-                    if (reg->bank != bank) {
+                    if (reg->bank != bsr) {
                         if (line->star) {
-                            if (bank != INT_MAX)
+                            if (bsr != INT_MAX)
                                 fatal(E_COMMON,
                                     "%u: Bank %d is active; star prevents "
-                                    "changing to bank %d", line->num, bank,
+                                    "changing to bank %d", line->num, bsr,
                                     reg->bank);
                         } else {
                             struct line* new = malloc(sizeof(struct line));
@@ -860,7 +860,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
                             ++addr;
                             prev = new;
-                            bank = reg->bank;
+                            bsr = reg->bank;
                             line->label = NULL;
                         }
                     }
@@ -879,7 +879,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                 line->opds[0].i = reg->bank;
                 line->opds[0].s = NULL;
             }
-            bank = line->opds[0].i;
+            bsr = line->opds[0].i;
         }
 
         // Handle bra.
@@ -897,7 +897,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         }
 
         if (opc == C_CALL || opc == C_CALLW)
-            bank = INT_MAX;
+            bsr = INT_MAX;
 
         if (verbosity >= 1) {
             printf("[0x%04X] ", addr);
