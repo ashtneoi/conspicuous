@@ -161,8 +161,8 @@ struct dict insns = {
 
 struct reg {
     const char* name;
-    unsigned int bank;
-    unsigned int addr;
+    int bank;
+    int addr;
 } reg_array[2048];
 
 
@@ -175,7 +175,7 @@ struct dict regs = {
 
 struct sreg {
     const char* name;
-    unsigned int addr;
+    int addr;
 } sreg_array[128];
 
 
@@ -188,7 +188,7 @@ struct dict sregs = {
 
 struct label {
     const char* name;
-    unsigned int addr;
+    int addr;
 } label_array[2048];
 
 
@@ -317,6 +317,8 @@ void print_line(struct line* line)
     if ( !(C_NONE < oi->opc && oi->opc < CD__LAST__) )
         fatal(2, "Not implemented");
 
+    printf("% 3d:  ", line->num);
+
     if (line->label != NULL)
         printf("%s: ", line->label);
     if (line->star)
@@ -343,7 +345,10 @@ void print_line(struct line* line)
                     printf("0x%02X", opd->i);
                     break;
                 case L:
-                    printf("0x%02"PRIX8, (int8_t)opd->i);
+                    if (opd->i < 0)
+                        printf("-0x%02"PRIX8, -(int8_t)opd->i);
+                    else
+                        printf("0x%02"PRIX8, (int8_t)opd->i);
                     break;
                 case B:
                 case A:
@@ -357,8 +362,6 @@ void print_line(struct line* line)
             }
         }
     }
-
-    printf("  ; %d", line->num);
 }
 
 
@@ -763,7 +766,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
     struct insn* oi_movlb = dict_get(&insns, "movlb");
 
     int addr = 0;
-    unsigned int bank = UINT_MAX;
+    int bank = INT_MAX;
     struct line* prev = NULL;
     struct line* line = start;
     while (line != NULL) {
@@ -814,7 +817,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
-            bank = UINT_MAX;
+            bank = INT_MAX;
         }
 
         // Resolve register names.
@@ -835,7 +838,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                     line->opds[0].i = reg->addr;
                     if (reg->bank != bank) {
                         if (line->star) {
-                            if (bank != UINT_MAX)
+                            if (bank != INT_MAX)
                                 fatal(E_COMMON,
                                     "%u: Bank %d is active; star prevents "
                                     "changing to bank %d", line->num, bank,
@@ -942,6 +945,8 @@ struct line* assemble_pass2(struct line* start, int* len)
             struct label* li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
+            if ((opc == C_CALL || opc == C_GOTO) && !line->star)
+                li->addr++;
             v2("label %s = %i", li->name, li->addr);
         }
 
@@ -951,7 +956,8 @@ struct line* assemble_pass2(struct line* start, int* len)
             if (li != NULL) {
                 if ((addr - 1) - li->addr > 256) { // forward limit
                     if (line->star)
-                        fatal(E_COMMON, "%u: Target out of range", line->num);
+                        fatal(E_COMMON, "%u: Target out of range (%d)",
+                            line->num, (addr - 1) - li->addr);
                     line->oi = oi_goto;
                 } else {
                     line->star = true;
@@ -1016,8 +1022,6 @@ struct line* assemble_pass3(struct line* start, int len)
             if (li != NULL) {
                 line->opds[0].s = NULL;
                 line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
-                if (line->opds[0].i < 0)
-                    --line->opds[0].i;
             }
         }
 
