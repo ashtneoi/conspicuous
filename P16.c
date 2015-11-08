@@ -896,6 +896,9 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             }
         }
 
+        if (opc == C_CALL || opc == C_CALLW)
+            bank = INT_MAX;
+
         if (verbosity >= 1) {
             printf("[0x%04X] ", addr);
             print_line(line);
