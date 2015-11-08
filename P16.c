@@ -847,6 +847,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                             new->label = line->label;
                             new->star = false;
                             new->opds[0].i = reg->bank;
+                            new->num = 0;
 
                             if (verbosity >= 1) {
                                 printf("[0x%04X] ", addr);
@@ -1071,6 +1072,7 @@ struct line* link_pass2(struct line* start)
             new->next = line;
             new->oi = oi_movlp;
             new->label = line->label;
+            new->num = 0;
 
             ++addr;
             int target = addr + line->opds[0].i;
