@@ -3,7 +3,7 @@
 
 #include "bufman.h"
 #include "fail.h"
-#include "P16.h"
+#include "arch_emr.h"
 #include "utils.h"
 
 #include <fcntl.h>
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
 
     // Assemble the source file.
 
-    assemble_P16(src);
+    assemble_emr(src);
 
     // Clean up and exit.
 

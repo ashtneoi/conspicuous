@@ -1,5 +1,5 @@
 #include "common.h"
-#include "P16.h"
+#include "arch_emr.h"
 
 #include "bufman.h"
 #include "cpic.h"
@@ -1197,7 +1197,7 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
 }
 
 
-void assemble_P16(const int src)
+void assemble_emr(const int src)
 {
     size_t bufpos = 0;
     size_t buflen = 1;
