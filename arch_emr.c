@@ -221,7 +221,7 @@ struct insn insns_ref[] = {
     { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D} },
     { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D} },
 
-    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0C00, .opds = {F, D} },
+    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0B00, .opds = {F, D} },
     { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D} },
 
     { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B} },
