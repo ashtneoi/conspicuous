@@ -1024,7 +1024,9 @@ struct line* assemble_pass3(struct line* start, int len)
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
                 line->opds[0].s = NULL;
-                line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
+                line->opds[0].i = ((len - 1) - li->addr) - addr;
+                if (!line->star)
+                    --line->opds[0].i;
             }
         }
 
