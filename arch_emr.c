@@ -139,7 +139,7 @@ enum operand_type {
     N, // FSR or INDF number (0 - 1)
     MM, // pre-/post-decrement/-increment select
     A, // bank number
-    I, // unused identifier
+    I, // new identifier
 };
 
 
@@ -238,7 +238,7 @@ struct insn insns_ref[] = {
         .kwid = 8 },
     { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {F, 0},
         .kwid = 5 },
-    { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {K, 0},
+    { .opc = C_MOVLP, .str = "movlp", .word = 0x3180, .opds = {L, 0},
         .kwid = 7 },
     { .opc = C_MOVLW, .str = "movlw", .word = 0x3000, .opds = {K, 0},
         .kwid = 8 },
@@ -698,11 +698,12 @@ struct line* parse_line(struct line* const prev_line,
             if (token->type == T_NUMBER) {
                 opd->i = token->num;
                 opd->s = NULL;
-                    fatal(1, "%u: Expected program address", l);
+                if (token->num >= 1<<oi->kwid)
+                    fatal(1, "%u: Literal out of range", l);
             } else if (token->type == T_TEXT) {
                 opd->s = token->text;
             } else {
-                fatal(1, "%u: Expected program label or address", l);
+                fatal(1, "%u: Expected program label or literal", l);
             }
         } else if (oi->opds[i] == D) {
             if (token->type != T_NUMBER)
@@ -907,7 +908,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
         // Increment address.
         if ( !(C__LAST__ < opc && opc <= CD__LAST__) )
-            addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
+            addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
 
         // Advance to next line.
         {
@@ -975,7 +976,7 @@ struct line* assemble_pass2(struct line* start, int* len)
         }
 
         // Increment addr.
-        addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
+        addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
 
         // Advance to next line.
         {
@@ -1013,14 +1014,13 @@ struct line* assemble_pass3(struct line* start, int len)
             li->addr = addr;
         }
 
-        // Handle bra.
         if (opc == C_BRA) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li == NULL)
                 fatal(E_RARE, "%u: Target should not be unknown", line->num);
             line->opds[0].s = NULL;
             line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
-        } else if (opc == C_GOTO || opc == C_CALL) {
+        } else if (opc == C_GOTO || opc == C_CALL || opc == C_MOVLP) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
                 line->opds[0].s = NULL;
@@ -1035,7 +1035,7 @@ struct line* assemble_pass3(struct line* start, int len)
         }
 
         // Increment addr.
-        addr += (opc == C_GOTO || opc == C_CALL) ? 2 : 1;
+        addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
 
         // Advance to next line.
         line = line->next;
@@ -1071,28 +1071,38 @@ struct line* link_pass2(struct line* start)
         enum opcode opc = line->oi->opc;
 
         if (opc == C_GOTO || opc == C_CALL) {
-            struct line* new = malloc(sizeof(struct line));
-            if (prev != NULL)
-                prev->next = new;
-            else
-                start = new;
-            new->next = line;
-            new->oi = oi_movlp;
-            new->label = line->label;
-            new->num = 0;
+            if (!line->star)
+                ++addr;
 
-            ++addr;
             int target = addr + line->opds[0].i;
-            new->opds[0].i = target >> 8;
-            line->opds[0].i = target & ((1 << 11) - 1);
 
-            line->label = NULL;
+            if (!line->star) {
+                struct line* new = malloc(sizeof(struct line));
+                if (prev != NULL)
+                    prev->next = new;
+                else
+                    start = new;
+                new->next = line;
+                new->oi = oi_movlp;
+                new->label = line->label;
+                new->num = 0;
+                new->opds[0].i = target >> 8;
 
-            if (verbosity >= 1) {
-                printf("[0x%04X] ", addr - 1);
-                print_line(new);
-                putchar('\n');
+                line->label = NULL;
+
+                if (verbosity >= 1) {
+                    printf("[0x%04X] ", addr - 1);
+                    print_line(new);
+                    putchar('\n');
+                }
             }
+
+            line->opds[0].i = target & ((1 << 11) - 1);
+        }
+
+        if (opc == C_MOVLP) {
+            int target = addr + line->opds[0].i;
+            line->opds[0].i = target >> 8;
         }
 
         if (verbosity >= 1) {
