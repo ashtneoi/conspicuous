@@ -115,6 +115,10 @@ enum opcode {
     C_RESET,
     C_SLEEP,
     C_TRIS,
+
+    C_MOVIW,
+    C_MOVWI,
+
     C__LAST__,
 
     CD_SFR,
@@ -122,6 +126,7 @@ enum opcode {
     CD_REG,
     CD_CREG,
     CD_CFG,
+
     CD__LAST__,
 
     // TODO: Implement more.
@@ -136,8 +141,7 @@ enum operand_type {
     L, // program address or label
     D, // destination select (0 = W, 1 = f)
     T, // TRIS operand (5 - 7)
-    N, // FSR or INDF number (0 - 1)
-    MM, // pre-/post-decrement/-increment select
+    N, // FSR number with pre-/post-decrement/-increment
     A, // bank number
     I, // new identifier
 };
@@ -266,6 +270,9 @@ struct insn insns_ref[] = {
     { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
     { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
 
+    { .opc = C_MOVIW, .str = "moviw", .word = 0x0010, .opds = {N, 0} },
+    { .opc = C_MOVWI, .str = "movwi", .word = 0x0018, .opds = {N, 0} },
+
     { .opc = CD_SFR, .str = ".sfr", .opds = {F, I} },
     { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
     { .opc = CD_REG, .str = ".reg", .opds = {A, I} },
@@ -356,6 +363,9 @@ void print_line(struct line* line)
                     break;
                 case D:
                     putchar('0'); // (Already handled 1.)
+                    break;
+                case N:
+                    printf("FSR%d, %d", line->opds[0].i, line->opds[1].i);
                     break;
                 default:
                     fatal(E_RARE, "Impossible situation");
@@ -567,7 +577,8 @@ void lex_line(struct token* token, const int src, unsigned int l,
                 if (
                         ('A' <= t[0] && t[0] <= 'Z') ||
                         ('a' <= t[0] && t[0] <= 'z') ||
-                        t[0] == '.' || t[0] == '_' || t[0] == '*') {
+                        t[0] == '.' || t[0] == '_' || t[0] == '*' ||
+                        t[0] == '+' || t[0] == '-') {
                     token->type = T_TEXT;
                     token->text = malloc(toklen + 1);
                     memcpy(token->text, t, toklen);
@@ -730,6 +741,33 @@ struct line* parse_line(struct line* const prev_line,
             if (token->type != T_TEXT)
                 fatal(1, "%u: Expected unused identifier", l);
             opd->s = token->text;
+        } else if (oi->opds[i] == N) {
+            if (token->type != T_TEXT || strlen(token->text) != 6)
+                fatal(1, "%u: Expected indirect register", l);
+
+            const char* fsr = NULL;
+            const char* mode = NULL;
+            if (strncmp(token->text, "FSR", 3) == 0) {
+                fsr = token->text + 3;
+                mode = token->text + 4;
+                line->opds[1].i = 2; // post-*
+            } else if (strncmp(token->text + 2, "FSR", 3) == 0) {
+                fsr = token->text + 5;
+                mode = token->text;
+                line->opds[1].i = 0; // pre-*
+            } else {
+                fatal(1, "%u: Expected indirect register", l);
+            }
+
+            if (*fsr != '0' && *fsr != '1')
+                fatal(1, "%u: FSR number out of range");
+            line->opds[0].i = *fsr - '0';
+
+            if (mode[0] == '-' && mode[1] == '-')
+                line->opds[1].i |= 1; // *-decrement
+            else if (mode[0] != '+' || mode[1] != '+')
+                fatal(1, "%u: Malformed indirect register", l);
+
         }
         ++token;
     }
@@ -1148,6 +1186,9 @@ uint16_t dump_line(struct line* line)
             break;
         case L:
             word |= num & ((1 << line->oi->kwid) - 1);
+            break;
+        case N:
+            word |= line->opds[0].i << 2 | line->opds[1].i;
             break;
         default:
             fatal(E_RARE, "Unrecognized operand type (%d)", line->oi->opds[0]);
