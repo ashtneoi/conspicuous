@@ -2,3 +2,4 @@
 (2015-11-01) Add macros for magic constants
 (2015-11-07) Fix line numbering (I think calls throw it off)
 (2015-11-13) Implement macro procedures (without arguments)
+(2015-11-21) Remove provably-unnecessary movlb lines
