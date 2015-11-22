@@ -119,6 +119,9 @@ enum opcode {
     C_MOVIW,
     C_MOVWI,
 
+    C_MOVPLW,
+    C_MOVPHW,
+
     C__LAST__,
 
     CD_SFR,
@@ -272,6 +275,9 @@ struct insn insns_ref[] = {
 
     { .opc = C_MOVIW, .str = "moviw", .word = 0x0010, .opds = {N, 0} },
     { .opc = C_MOVWI, .str = "movwi", .word = 0x0018, .opds = {N, 0} },
+
+    { .opc = C_MOVPLW, .str = "movplw", .opds = {L, 0} },
+    { .opc = C_MOVPHW, .str = "movphw", .opds = {L, 0} },
 
     { .opc = CD_SFR, .str = ".sfr", .opds = {F, I} },
     { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
@@ -1052,7 +1058,7 @@ struct line* assemble_pass3(struct line* start, int len)
             li->addr = addr;
         }
 
-        if (opc == C_BRA) {
+        if (opc == C_BRA || opc == C_MOVPLW || opc == C_MOVPHW) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li == NULL)
                 fatal(E_RARE, "%u: Target should not be unknown", line->num);
@@ -1103,6 +1109,7 @@ static
 struct line* link_pass2(struct line* start)
 {
     struct insn* oi_movlp = dict_get(&insns, "movlp");
+    struct insn* oi_movlw = dict_get(&insns, "movlw");
 
     int addr = 0;
     struct line* prev = NULL;
@@ -1138,6 +1145,16 @@ struct line* link_pass2(struct line* start)
             }
 
             line->opds[0].i = target & ((1 << 11) - 1);
+        } else if (opc == C_MOVPLW || opc == C_MOVPHW) {
+            line->oi = oi_movlw;
+            int target = addr + 1 + line->opds[0].i;
+
+            if (opc == C_MOVPLW)
+                target &= 0xFF;
+            else if (opc == C_MOVPHW)
+                target = (target >> 8) + 0x80;
+
+            line->opds[0].i = target;
         }
 
         if (opc == C_MOVLP) {
