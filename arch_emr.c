@@ -385,8 +385,6 @@ static inline
 ssize_t fill_buffer(const int src, size_t* const bufpos, size_t* const buflen,
         size_t* const keep)
 {
-    v2("Filling source file buffer (bufpos = %zd, keep = %zd, buflen = %zd)",
-        *bufpos, *keep, *buflen);
     if (*buflen - *keep > CHUNK_LEN)
         fatal(1, "Buffer is already full");
     ssize_t count = bufgrab(src, buf, buflen, CHUNK_LEN, *keep);
@@ -395,8 +393,6 @@ ssize_t fill_buffer(const int src, size_t* const bufpos, size_t* const buflen,
     *bufpos = *bufpos - *keep;
     buf[*buflen] = '\0';
     *keep = 0;
-    v2("buf = \"%s\" (pos = %zd, keep = %zd, len = %zd)",
-        buf, *bufpos, *keep, *buflen);
     return count;
 }
 
@@ -631,14 +627,12 @@ struct line* parse_line(struct line* const prev_line,
     if (token->type != T_TEXT)
         fatal(1, "%u: Expected label or opcode", l);
 
-    v2("Setting label");
     if (token[1].type == T_COLON) {
         if (*label != NULL)
             fatal(1, "%u: Instruction already has a label", l);
         *label = token->text;
         token += 2;
         if (token->type == T_NONE) {
-            v2("Carrying label to next line");
             return prev_line;
         } else if (token->type != T_TEXT) {
             fatal(1, "%u: Expected opcode", l);
@@ -897,7 +891,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                             new->opds[0].i = reg->bank;
                             new->num = 0;
 
-                            if (verbosity >= 1) {
+                            if (verbosity >= 2) {
                                 printf("[0x%04X] ", addr);
                                 print_line(new);
                                 putchar('\n');
@@ -931,7 +925,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         if (opc == C_BRA) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
-                if ((addr + 1) - li->addr > 255) { // reverse limit
+                if ((addr + 1) - li->addr > 256) { // reverse limit
                     if (line->star)
                         fatal(E_COMMON, "%u: Target out of range", line->num);
                     line->oi = oi_goto;
@@ -944,7 +938,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         if (opc == C_CALL || opc == C_CALLW)
             bsr = INT_MAX;
 
-        if (verbosity >= 1) {
+        if (verbosity >= 2) {
             printf("[0x%04X] ", addr);
             print_line(line);
             putchar('\n');
@@ -965,7 +959,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
         }
     }
 
-    if (verbosity >= 1)
+    if (verbosity >= 2)
         putchar('\n');
 
     return prev;
@@ -988,24 +982,27 @@ struct line* assemble_pass2(struct line* start, int* len)
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
 
+        if ((opc == C_GOTO || opc == C_CALL) && !line->star)
+            ++addr;
+
         // Store label info.
+        struct label* li = NULL;
         if (line->label != NULL) {
-            struct label* li = dict_avail(&labels, line->label);
+            li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
-            if ((opc == C_CALL || opc == C_GOTO) && !line->star)
-                li->addr++;
-            v2("label %s = %i", li->name, li->addr);
         }
 
         // Handle bra.
         if (opc == C_BRA) {
-            struct label* li = dict_get(&labels, line->opds[0].s);
-            if (li != NULL) {
-                if ((addr - 1) - li->addr > 256) { // forward limit
+            struct label* tgt = dict_get(&labels, line->opds[0].s);
+            if (tgt != NULL) {
+                if ((addr - 1) - tgt->addr > 255) { // forward limit
                     if (line->star)
                         fatal(E_COMMON, "%u: Target out of range (%d)",
-                            line->num, (addr - 1) - li->addr);
+                            line->num, (addr - 1) - tgt->addr);
+                    if (li == tgt)
+                        ++addr;
                     line->oi = oi_goto;
                 } else {
                     line->star = true;
@@ -1013,14 +1010,14 @@ struct line* assemble_pass2(struct line* start, int* len)
             }
         }
 
-        if (verbosity >= 1) {
+        if (verbosity >= 2) {
             printf("[0x%04X] ", addr);
             print_line(line);
             putchar('\n');
         }
 
         // Increment addr.
-        addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
+        ++addr;
 
         // Advance to next line.
         {
@@ -1033,7 +1030,7 @@ struct line* assemble_pass2(struct line* start, int* len)
 
     *len = addr;
 
-    if (verbosity >= 1)
+    if (verbosity >= 2)
         putchar('\n');
 
     return prev;
@@ -1051,12 +1048,8 @@ struct line* assemble_pass3(struct line* start, int len)
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
 
-        // Store label info.
-        if (line->label != NULL) {
-            struct label* li = dict_avail(&labels, line->label);
-            li->name = line->label;
-            li->addr = addr;
-        }
+        if ((opc == C_GOTO || opc == C_CALL) && !line->star)
+            ++addr;
 
         if (opc == C_BRA || opc == C_MOVPLW || opc == C_MOVPHW) {
             struct label* li = dict_get(&labels, line->opds[0].s);
@@ -1068,26 +1061,24 @@ struct line* assemble_pass3(struct line* start, int len)
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
                 line->opds[0].s = NULL;
-                line->opds[0].i = ((len - 1) - li->addr) - addr;
-                if (!line->star)
-                    --line->opds[0].i;
+                line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
             }
         }
 
-        if (verbosity >= 1) {
+        if (verbosity >= 2) {
             printf("[0x%04X] ", addr);
             print_line(line);
             putchar('\n');
         }
 
         // Increment addr.
-        addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
+        ++addr;
 
         // Advance to next line.
         line = line->next;
     }
 
-    if (verbosity >= 1)
+    if (verbosity >= 2)
         putchar('\n');
 
     return start;
@@ -1117,11 +1108,11 @@ struct line* link_pass2(struct line* start)
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
 
-        if (opc == C_GOTO || opc == C_CALL) {
-            if (!line->star)
-                ++addr;
+        if ((opc == C_GOTO || opc == C_CALL) && !line->star)
+            ++addr;
 
-            int target = addr + line->opds[0].i;
+        if (opc == C_GOTO || opc == C_CALL) {
+            int target = (addr + 1) + line->opds[0].i;
 
             if (!line->star) {
                 struct line* new = malloc(sizeof(struct line));
@@ -1147,7 +1138,7 @@ struct line* link_pass2(struct line* start)
             line->opds[0].i = target & ((1 << 11) - 1);
         } else if (opc == C_MOVPLW || opc == C_MOVPHW) {
             line->oi = oi_movlw;
-            int target = addr + 1 + line->opds[0].i;
+            int target = (addr + 1) + line->opds[0].i;
 
             if (opc == C_MOVPLW)
                 target &= 0xFF;
@@ -1158,7 +1149,7 @@ struct line* link_pass2(struct line* start)
         }
 
         if (opc == C_MOVLP) {
-            int target = addr + line->opds[0].i;
+            int target = (addr + 1) + line->opds[0].i;
             line->opds[0].i = target >> 8;
         }
 
@@ -1239,14 +1230,8 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
         uint8_t sum = line_count * 2 + ((addr * 2) & 0xFF) + ((addr * 2) >> 8);
         printf(":%02X%04X00", line_count * 2, addr * 2);
         for (int i = 0; i < line_count; ++i, ++addr) {
-            if (verbosity >= 2) {
-                print_line(line);
-                putchar('\n');
-            }
             uint16_t line_bin = dump_line(line);
             printf("%02"PRIX8"%02"PRIX8, line_bin & 0xFF, line_bin >> 8);
-            if (verbosity >= 2)
-                putchar('\n');
             sum += (line_bin & 0xFF) + (line_bin >> 8);
             line = line->next;
         }
@@ -1281,13 +1266,12 @@ void assemble_emr(const int src)
 
     char* label = NULL;
     for (unsigned int l = 1; /* */; ++l) {
-        v2("Lexing line");
         struct token tokens[16];
         lex_line(tokens, src, l, &bufpos, &buflen);
-        if (verbosity >= 2)
-            for (unsigned int i = 0; i < lengthof(tokens) &&
-                    tokens[i].type != T_NONE; ++i)
-                print_token(&tokens[i]);
+        /*if (verbosity >= 2)*/
+            /*for (unsigned int i = 0; i < lengthof(tokens) &&*/
+                    /*tokens[i].type != T_NONE; ++i)*/
+                /*print_token(&tokens[i]);*/
         if (buflen == 0)
             break;
         struct line* line = parse_line(prev_line, tokens, l, &label);
