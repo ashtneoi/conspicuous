@@ -1234,7 +1234,7 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
 {
     int addr = 0;
     struct line* line = start;
-    while (line != NULL) {
+    while (addr < len) {
         int line_count = (len - addr >= 8) ? 8 : len - addr;
         uint8_t sum = line_count * 2 + addr * 2;
         printf(":%02X%04X00", line_count * 2, addr * 2);
