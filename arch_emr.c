@@ -359,9 +359,9 @@ void print_line(struct line* line)
                     break;
                 case L:
                     if (opd->i < 0)
-                        printf("-0x%02"PRIX8, -(int8_t)opd->i);
+                        printf("-0x%02"PRIX8, -(int16_t)opd->i);
                     else
-                        printf("0x%02"PRIX8, (int8_t)opd->i);
+                        printf("0x%02"PRIX8, (int16_t)opd->i);
                     break;
                 case B:
                 case A:
