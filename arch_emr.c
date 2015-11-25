@@ -982,15 +982,14 @@ struct line* assemble_pass2(struct line* start, int* len)
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
 
-        if ((opc == C_GOTO || opc == C_CALL) && !line->star)
-            ++addr;
-
         // Store label info.
         struct label* li = NULL;
         if (line->label != NULL) {
             li = dict_avail(&labels, line->label);
             li->name = line->label;
             li->addr = addr;
+            if ((opc == C_GOTO || opc == C_CALL) && !line->star)
+                ++li->addr;
         }
 
         // Handle bra.
@@ -1002,7 +1001,7 @@ struct line* assemble_pass2(struct line* start, int* len)
                         fatal(E_COMMON, "%u: Target out of range (%d)",
                             line->num, (addr - 1) - tgt->addr);
                     if (li == tgt)
-                        ++addr;
+                        ++li->addr;
                     line->oi = oi_goto;
                 } else {
                     line->star = true;
@@ -1017,7 +1016,7 @@ struct line* assemble_pass2(struct line* start, int* len)
         }
 
         // Increment addr.
-        ++addr;
+        addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
 
         // Advance to next line.
         {
