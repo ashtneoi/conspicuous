@@ -1236,7 +1236,7 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
     struct line* line = start;
     while (addr < len) {
         int line_count = (len - addr >= 8) ? 8 : len - addr;
-        uint8_t sum = line_count * 2 + addr * 2;
+        uint8_t sum = line_count * 2 + ((addr * 2) & 0xFF) + ((addr * 2) >> 8);
         printf(":%02X%04X00", line_count * 2, addr * 2);
         for (int i = 0; i < line_count; ++i, ++addr) {
             if (verbosity >= 2) {
@@ -1259,7 +1259,7 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
             continue;
         int data_hi = cfg[a] >> 8;
         int data_lo = cfg[a] & 0xFF;
-        uint8_t sum = 2 + a + data_hi + data_lo;
+        uint8_t sum = 2 + 2*a + data_hi + data_lo;
         printf(":02%04X00%02X%02X%02"PRIX8"\n", a * 2, data_lo, data_hi,
             (uint8_t)-sum);
     }
