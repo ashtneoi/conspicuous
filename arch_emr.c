@@ -381,6 +381,18 @@ void print_line(struct line* line)
 }
 
 
+struct line* insert_line(struct line* next)
+{
+    struct line* new = malloc(sizeof(struct line));
+    new->next = next;
+    new->label = next->label;
+    next->label = NULL;
+    new->num = next->num;
+
+    return new;
+}
+
+
 static inline
 ssize_t fill_buffer(const int src, size_t* const bufpos, size_t* const buflen,
         size_t* const keep)
@@ -784,6 +796,7 @@ struct line* parse_line(struct line* const prev_line,
 // ___f___ : insert movlb if bank not active
 // [*]___f___ : resolve
 // bra : change to goto if target far, star if target near
+// call, goto : insert movlp
 static
 struct line* assemble_pass1(struct line* start, int16_t* cfg)
 {
@@ -803,6 +816,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
     struct insn* oi_goto = dict_get(&insns, "goto");
     struct insn* oi_movlb = dict_get(&insns, "movlb");
+    struct insn* oi_movlp = dict_get(&insns, "movlp");
 
     int addr = 0;
     int bsr = INT_MAX;
@@ -883,13 +897,12 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                                     "changing to bank %d", line->num, bsr,
                                     reg->bank);
                         } else {
-                            struct line* new = malloc(sizeof(struct line));
+                            struct line* new = insert_line(line);
                             new->next = prev;
                             new->oi = oi_movlb;
-                            new->label = line->label;
                             new->star = false;
                             new->opds[0].i = reg->bank;
-                            new->num = 0;
+                            new->opds[0].s = NULL;
 
                             if (verbosity >= 2) {
                                 printf("[0x%04X] ", addr);
@@ -900,7 +913,6 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                             ++addr;
                             prev = new;
                             bsr = reg->bank;
-                            line->label = NULL;
                         }
                     }
                 }
@@ -928,6 +940,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                 if ((addr + 1) - li->addr > 256) { // reverse limit
                     if (line->star)
                         fatal(E_COMMON, "%u: Target out of range", line->num);
+                    opc = C_GOTO;
                     line->oi = oi_goto;
                 } else {
                     line->star = true;
@@ -935,8 +948,27 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             }
         }
 
-        if (opc == C_CALL || opc == C_CALLW)
+        if ((opc == C_GOTO || opc == C_CALL) && !line->star) {
+            struct line* new = insert_line(line);
+            new->next = prev;
+            new->oi = oi_movlp;
+            new->star = false;
+            new->opds[0].i = line->opds[0].i;
+            new->opds[0].s = line->opds[0].s;
+
+            if (verbosity >= 2) {
+                printf("[0x%04X] ", addr);
+                print_line(new);
+                putchar('\n');
+            }
+
+            ++addr;
+            prev = new;
+        }
+
+        if (opc == C_CALL || opc == C_CALLW) {
             bsr = INT_MAX;
+        }
 
         if (verbosity >= 2) {
             printf("[0x%04X] ", addr);
@@ -946,7 +978,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
         // Increment address.
         if ( !(C__LAST__ < opc && opc <= CD__LAST__) )
-            addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
+            ++addr;
 
         // Advance to next line.
         {
@@ -1016,7 +1048,7 @@ struct line* assemble_pass2(struct line* start, int* len)
         }
 
         // Increment addr.
-        addr += ((opc == C_GOTO || opc == C_CALL) && !line->star) ? 2 : 1;
+        ++addr;
 
         // Advance to next line.
         {
@@ -1046,9 +1078,6 @@ struct line* assemble_pass3(struct line* start, int len)
     struct line* line = start;
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
-
-        if ((opc == C_GOTO || opc == C_CALL) && !line->star)
-            ++addr;
 
         if (opc == C_BRA || opc == C_MOVPLW || opc == C_MOVPHW) {
             struct label* li = dict_get(&labels, line->opds[0].s);
@@ -1098,41 +1127,36 @@ struct line* link_pass1(struct line* start)
 static
 struct line* link_pass2(struct line* start)
 {
-    struct insn* oi_movlp = dict_get(&insns, "movlp");
+    /*struct insn* oi_movlp = dict_get(&insns, "movlp");*/
     struct insn* oi_movlw = dict_get(&insns, "movlw");
 
     int addr = 0;
-    struct line* prev = NULL;
     struct line* line = start;
     while (line != NULL) {
         enum opcode opc = line->oi->opc;
 
-        if ((opc == C_GOTO || opc == C_CALL) && !line->star)
-            ++addr;
-
         if (opc == C_GOTO || opc == C_CALL) {
             int target = (addr + 1) + line->opds[0].i;
 
-            if (!line->star) {
-                struct line* new = malloc(sizeof(struct line));
-                if (prev != NULL)
-                    prev->next = new;
-                else
-                    start = new;
-                new->next = line;
-                new->oi = oi_movlp;
-                new->label = line->label;
-                new->num = 0;
-                new->opds[0].i = target >> 8;
+            /*if (!line->star) {*/
+                /*struct line* new = insert_line(line);*/
+                /*if (prev == NULL)*/
+                    /*start = new;*/
+                /*else*/
+                    /*prev->next = new;*/
+                /*new->oi = oi_movlp;*/
+                /*new->star = false;*/
+                /*new->opds[0].i = target >> 8;*/
+                /*new->opds[0].s = NULL;*/
 
-                line->label = NULL;
+                /*if (verbosity >= 1) {*/
+                    /*printf("[0x%04X] ", addr);*/
+                    /*print_line(new);*/
+                    /*putchar('\n');*/
+                /*}*/
 
-                if (verbosity >= 1) {
-                    printf("[0x%04X] ", addr - 1);
-                    print_line(new);
-                    putchar('\n');
-                }
-            }
+                /*++addr;*/
+            /*}*/
 
             line->opds[0].i = target & ((1 << 11) - 1);
         } else if (opc == C_MOVPLW || opc == C_MOVPHW) {
@@ -1162,7 +1186,6 @@ struct line* link_pass2(struct line* start)
         ++addr;
 
         // Advance to next line.
-        prev = line;
         line = line->next;
     }
 

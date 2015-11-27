@@ -72,7 +72,6 @@ int main(int argc, char** argv)
     if (source_idx >= argc)
         fatal(E_COMMON, "No file specified");
 
-    v2("Opening source file");
     int src = open(argv[source_idx], O_RDONLY);
     if (src < 0)
         fatal_e(E_COMMON, "Can't open file \"%s\"", argv[source_idx]);
