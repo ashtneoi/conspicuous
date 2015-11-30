@@ -1044,7 +1044,8 @@ struct line* assemble_pass2(struct line* start, int* len)
                     if (line->star)
                         fatal(E_COMMON, "%u: Target out of range (%d)",
                             line->num, (addr - 1) - tgt->addr);
-                    ++li->addr;
+                    if (li != NULL)
+                        ++li->addr;
                     line->oi = oi_goto;
 
                     struct line* new = append_line(line);
