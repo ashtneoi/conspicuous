@@ -776,10 +776,12 @@ struct line* parse_line(struct line* const prev_line,
                 fsr = token->text + 3;
                 mode = token->text + 4;
                 line->opds[1].i = 2; // post-*
+                line->opds[1].s = NULL;
             } else if (strncmp(token->text + 2, "FSR", 3) == 0) {
                 fsr = token->text + 5;
                 mode = token->text;
                 line->opds[1].i = 0; // pre-*
+                line->opds[1].s = NULL;
             } else {
                 fatal(1, "%u: Expected indirect register", l);
             }
@@ -787,6 +789,7 @@ struct line* parse_line(struct line* const prev_line,
             if (*fsr != '0' && *fsr != '1')
                 fatal(1, "%u: FSR number out of range");
             line->opds[0].i = *fsr - '0';
+            line->opds[0].s = NULL;
 
             if (mode[0] == '-' && mode[1] == '-')
                 line->opds[1].i |= 1; // *-decrement
@@ -900,8 +903,10 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
                         fatal(E_COMMON, "%u: Unknown register name",
                             line->num);
                     line->opds[0].i = sreg->addr;
+                    line->opds[0].s = NULL;
                 } else {
                     line->opds[0].i = reg->addr;
+                    line->opds[0].s = NULL;
                     if (reg->bank != bsr) {
                         if (line->star) {
                             if (bsr != INT_MAX)
@@ -1112,13 +1117,13 @@ struct line* assemble_pass3(struct line* start, int len)
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li == NULL)
                 fatal(E_RARE, "%u: Target should not be unknown", line->num);
-            line->opds[0].s = NULL;
             line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
+            line->opds[0].s = NULL;
         } else if (opc == C_GOTO || opc == C_CALL || opc == C_MOVLP) {
             struct label* li = dict_get(&labels, line->opds[0].s);
             if (li != NULL) {
-                line->opds[0].s = NULL;
                 line->opds[0].i = ((len - 1) - li->addr) - (addr + 1);
+                line->opds[0].s = NULL;
             }
         }
 
