@@ -823,6 +823,7 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
     int autobankmin;
     int autobankmax;
     int autoaddrmax;
+    int cautoaddr = 0x70;
 
     dict_init(&labels);
     dict_init(&regs);
@@ -871,6 +872,12 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             reg->name = line->opds[1].s;
 
             ++*a;
+        } else if (opc == CD_CREG) {
+            if (cautoaddr > 0x7F)
+                fatal(E_COMMON, "%u: No common registers left", line->num);
+            struct creg* creg = dict_avail(&cregs, line->opds[0].s);
+            creg->addr = cautoaddr++;
+            creg->name = line->opds[0].s;
         } else if (opc == CD_CFG) {
             int addr = line->opds[0].i - 0x8000;
             if (addr < 0 || addr >= 0xF)
