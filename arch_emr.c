@@ -180,16 +180,16 @@ struct dict regs = {
 };
 
 
-struct sreg {
+struct creg {
     const char* name;
     int addr;
-} sreg_array[128];
+} creg_array[128];
 
 
-struct dict sregs = {
-    .array = sreg_array,
-    .capacity = lengthof(sreg_array),
-    .value_len = sizeof(struct sreg),
+struct dict cregs = {
+    .array = creg_array,
+    .capacity = lengthof(creg_array),
+    .value_len = sizeof(struct creg),
 };
 
 
@@ -287,7 +287,7 @@ struct insn insns_ref[] = {
 };
 
 
-struct sreg sregs_ref[] = {
+struct creg cregs_ref[] = {
     { .name = "INDF0", .addr = 0x00 },
     { .name = "INDF1", .addr = 0x01 },
     { .name = "PCL", .addr = 0x02 },
@@ -826,9 +826,9 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
     dict_init(&labels);
     dict_init(&regs);
-    dict_init(&sregs);
-    for (unsigned int i = 0; i < lengthof(sregs_ref); ++i)
-        *(struct sreg*)dict_avail(&sregs, sregs_ref[i].name) = sregs_ref[i];
+    dict_init(&cregs);
+    for (unsigned int i = 0; i < lengthof(cregs_ref); ++i)
+        *(struct creg*)dict_avail(&cregs, cregs_ref[i].name) = cregs_ref[i];
 
     struct insn* oi_goto = dict_get(&insns, "goto");
     struct insn* oi_movlb = dict_get(&insns, "movlb");
@@ -898,11 +898,11 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             if (line->opds[0].s != NULL) {
                 struct reg* reg = dict_get(&regs, line->opds[0].s);
                 if (reg == NULL) {
-                    struct sreg* sreg = dict_get(&sregs, line->opds[0].s);
-                    if (sreg == NULL)
+                    struct creg* creg = dict_get(&cregs, line->opds[0].s);
+                    if (creg == NULL)
                         fatal(E_COMMON, "%u: Unknown register name",
                             line->num);
-                    line->opds[0].i = sreg->addr;
+                    line->opds[0].i = creg->addr;
                     line->opds[0].s = NULL;
                 } else {
                     line->opds[0].i = reg->addr;
