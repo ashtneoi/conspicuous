@@ -116,6 +116,7 @@ enum opcode {
     C_SLEEP,
     C_TRIS,
 
+    C_ADDFSR,
     C_MOVIW,
     C_MOVWI,
 
@@ -144,7 +145,8 @@ enum operand_type {
     L, // program address or label
     D, // destination select (0 = W, 1 = f)
     T, // TRIS operand (5 - 7)
-    N, // FSR number with pre-/post-decrement/-increment
+    N, // FSR number
+    M, // FSR number with pre-/post-decrement/-increment
     A, // bank number
     I, // new identifier
 };
@@ -273,8 +275,10 @@ struct insn insns_ref[] = {
     { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
     { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
 
-    { .opc = C_MOVIW, .str = "moviw", .word = 0x0010, .opds = {N, 0} },
-    { .opc = C_MOVWI, .str = "movwi", .word = 0x0018, .opds = {N, 0} },
+    { .opc = C_ADDFSR, .str = "addfsr", .word = 0x3100, .opds = {N, K},
+        .kwid=6 },
+    { .opc = C_MOVIW, .str = "moviw", .word = 0x0010, .opds = {M, 0} },
+    { .opc = C_MOVWI, .str = "movwi", .word = 0x0018, .opds = {M, 0} },
 
     { .opc = C_MOVPLW, .str = "movplw", .opds = {L, 0} },
     { .opc = C_MOVPHW, .str = "movphw", .opds = {L, 0} },
@@ -371,6 +375,9 @@ void print_line(struct line* line)
                     putchar('0'); // (Already handled 1.)
                     break;
                 case N:
+                    printf("FSR%d", line->opds[0].i);
+                    break;
+                case M:
                     printf("FSR%d, %d", line->opds[0].i, line->opds[1].i);
                     break;
                 default:
@@ -767,6 +774,18 @@ struct line* parse_line(struct line* const prev_line,
                 fatal(1, "%u: Expected unused identifier", l);
             opd->s = token->text;
         } else if (oi->opds[i] == N) {
+            if (token->type != T_TEXT || strlen(token->text) != 4)
+                fatal(1, "%u: Expected indirect register", l);
+
+            if (strncmp(token->text, "FSR", 3) != 0)
+                fatal(1, "%u: Expected indirect register", l);
+
+            const char* fsr = token->text + 3;
+            if (*fsr != '0' && *fsr != '1')
+                fatal(1, "%u: FSR number out of range");
+
+            line->opds[i].i = *fsr - '0';
+        } else if (oi->opds[i] == M) {
             if (token->type != T_TEXT || strlen(token->text) != 6)
                 fatal(1, "%u: Expected indirect register", l);
 
@@ -1239,6 +1258,9 @@ uint16_t dump_line(struct line* line)
             word |= num & ((1 << line->oi->kwid) - 1);
             break;
         case N:
+            word |= line->opds[0].i << 6;
+            break;
+        case M:
             word |= line->opds[0].i << 2 | line->opds[1].i;
             break;
         default:
@@ -1252,6 +1274,9 @@ uint16_t dump_line(struct line* line)
         fatal(E_RARE, "%u: Unresolved symbol", line->num);
     num = line->opds[1].i;
     switch (line->oi->opds[1]) {
+        case K:
+            word |= num;
+            break;
         case B:
         case D:
             word |= num << 7;
