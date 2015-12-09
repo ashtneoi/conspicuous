@@ -1,7 +1,8 @@
 (2015-11-01) Make integer signedness more consistent
 (2015-11-01) Add macros for magic constants
-(2015-11-07) Fix line numbering (I think calls throw it off)
+(2015-11-07) Fix line numbering
 (2015-11-13) Implement macro procedures
 (2015-11-21) Remove provably-unnecessary movlb lines
 (2015-11-21) Allow comments of arbitrary length
 (2015-11-21) Increase insn argument limit
+(2015-12-08) Understand negative literals (at least for addlw and addfsr)
