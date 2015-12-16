@@ -956,8 +956,9 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
 
                             ++addr;
                             prev = new;
-                            bsr = reg->bank;
                         }
+
+                        bsr = reg->bank;
                     }
                 }
                 line->opds[0].s = NULL;
