@@ -1,7 +1,0 @@
-        ORG 0
-        movlw 0x61
-        movlb 1
-        movwf 0x0C
-a:      movlb 1
-        movwf 0x0D
-        END

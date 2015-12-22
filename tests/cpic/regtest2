@@ -1,5 +1,0 @@
-        .sfr 0x8C, A
-        .sfr 0x8D, B
-        movlw 0x61
-        movwf A
-a:      movwf B

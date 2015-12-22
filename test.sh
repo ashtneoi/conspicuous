@@ -3,11 +3,24 @@
 
 fail() { echo $1; exit 1; }
 
-for name in $(basename -a tests/cpic/*); do
-	echo $name
-	./cpic tests/cpic/$name >/tmp/cpic.test.hex \
-		|| fail "cpic failed"
-	gpasm -w 1 -p 16F1704 -a INHX8M -o /tmp/gpasm.test.hex tests/gpasm/$name \
-		|| fail "gpasm failed"
-	diff /tmp/cpic.test.hex /tmp/gpasm.test.hex || fail "Files differ"
+for name in $(basename -a tests/assemble/*.s); do
+	diff <(./cpic tests/assemble/$name) ${name%..}.hex
+	./cpic $name >/dev/null || {
+		echo "FAIL: $name assemble failed ($?)"
+		exit 1
+	}
+done
+
+for name in tests/assemble-fail/*; do
+	./cpic $name >/dev/null && {
+		echo "FAIL: $name assemble succeeded ($?)"
+		exit 1
+	}
+done
+
+for name in $(basename -a tests/same-A/*); do
+	diff <(./cpic tests/same-A/$name) <(./cpic tests/same-B/$name) || {
+		echo "FAIL: tests/same-A/$name doesn't match tests/same-B/$name"
+		exit 1
+	}
 done
