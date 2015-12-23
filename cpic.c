@@ -1,4 +1,3 @@
-#include "common.h"
 #include "cpic.h"
 
 #include "bufman.h"

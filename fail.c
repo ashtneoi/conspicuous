@@ -1,6 +1,4 @@
-#include "common.h"
 #include "fail.h"
-
 
 #include <errno.h>
 #include <stdarg.h>

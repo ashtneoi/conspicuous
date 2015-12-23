@@ -1,13 +1,12 @@
 #pragma once
 
 
+#include "common.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
 
-#define str(x) str_(x)
-#define str_(x) #x
-#define print(msg) do { fputs(msg, stdout); } while (0)
 #define v0(...) do { vx_(__FILE__, __LINE__, __VA_ARGS__); } while (0)
 #define v1(...) do { if (verbosity >= 1) vx_(__FILE__, __LINE__, \
                 __VA_ARGS__); } while (0)

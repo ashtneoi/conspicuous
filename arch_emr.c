@@ -1,4 +1,3 @@
-#include "common.h"
 #include "arch_emr.h"
 
 #include "bufman.h"
@@ -18,9 +17,6 @@
 #define CHUNK_LEN 128
 #define BUFCAP (CHUNK_LEN * 2)
 #define CFG_MEM_SIZE 0x10
-
-#define min(x, y) ((x) < (y) ? (x) : (y))
-#define max(x, y) ((x) > (y) ? (x) : (y))
 
 
 char buf[CHUNK_LEN * 2 + 1];
