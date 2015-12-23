@@ -749,12 +749,16 @@ struct line* parse_line(struct line* const prev_line,
                 fatal(1, "%u: Expected program label or literal", l);
             }
         } else if (oi->opds[i] == D) {
-            if (token->type != T_NUMBER)
+            if (token->type != T_TEXT || token->text[1] != '\0')
                 fatal(1, "%u: Expected destination select", l);
-            else if (token->num > 1)
-                fatal(1, "%u: Destination select out of range", l);
-            opd->i = token->num;
+
             opd->s = NULL;
+            if (token->text[0] == 'w' || token->text[0] == 'W')
+                opd->i = 0;
+            else if (token->text[0] == 'f' || token->text[0] == 'F')
+                opd->i = 1;
+            else
+                fatal(1, "%u: Expected destination select", l);
         } else if (oi->opds[i] == T) {
             if (token->type != T_NUMBER)
                 fatal(1, "%u: Expected number", l); // TODO: Fix error.
