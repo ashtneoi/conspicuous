@@ -1,26 +1,31 @@
 #!/usr/bin/env bash
 
 
-fail() { echo $1; exit 1; }
+shopt -s nullglob
 
-for name in $(basename -a tests/assemble/*.s); do
-	diff <(./cpic tests/assemble/$name) ${name%..}.hex
-	./cpic $name >/dev/null || {
-		echo "FAIL: $name assemble failed ($?)"
-		exit 1
-	}
+
+fail() {
+	echo "FAIL: $1"
+	exit 1
+}
+
+
+for name in tests/assemble/*.s; do
+	echo $name
+	diff <(./cpic $name || fail "$name assemble failed ($?)") \
+		${name%.s}.hex
 done
 
-for name in tests/assemble-fail/*; do
-	./cpic $name >/dev/null && {
-		echo "FAIL: $name assemble succeeded ($?)"
-		exit 1
-	}
+for name in tests/assemble-fail/*.s; do
+	echo $name
+	./cpic $name >/dev/null && fail "$name assemble succeeded ($?)"
 done
 
-for name in $(basename -a tests/same-A/*); do
-	diff <(./cpic tests/same-A/$name) <(./cpic tests/same-B/$name) || {
-		echo "FAIL: tests/same-A/$name doesn't match tests/same-B/$name"
-		exit 1
-	}
-done
+T=$(echo tests/same-A/*.s)
+if ! [[ -z ${T:+nonempty} ]]; then
+	for name in $(basename -a $T); do
+		echo $name
+		diff <(./cpic tests/same-A/$name) <(./cpic tests/same-B/$name) ||
+			fail "tests/same-A/$name doesn't match tests/same-B/$name"
+	done
+fi
