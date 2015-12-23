@@ -988,7 +988,8 @@ struct line* assemble_pass1(struct line* start, int16_t* cfg)
             if (li != NULL) {
                 if ((addr + 1) - li->addr > 256) { // reverse limit
                     if (line->star)
-                        fatal(E_COMMON, "%u: Target out of range", line->num);
+                        fatal(E_COMMON, "%u: Target out of range (%u)",
+                            (addr + 1) - li->addr, line->num);
                     opc = C_GOTO;
                     line->oi = oi_goto;
                 } else {
