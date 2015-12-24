@@ -15,11 +15,7 @@
 
 
 #define CHUNK_LEN 128
-#define BUFCAP (CHUNK_LEN * 2)
 #define CFG_MEM_SIZE 0x10
-
-
-char buf[CHUNK_LEN * 2 + 1];
 
 
 enum token_type {
@@ -409,22 +405,6 @@ struct line* append_line(struct line* prev)
 }
 
 
-static inline
-ssize_t fill_buffer(const int src, size_t* const bufpos, size_t* const buflen,
-        size_t* const keep)
-{
-    if (*buflen - *keep > CHUNK_LEN)
-        fatal(1, "Buffer is already full");
-    ssize_t count = bufgrab(src, buf, buflen, CHUNK_LEN, *keep);
-    if (count < 0)
-        fatal_e(1, "Can't read from source file");
-    *bufpos = *bufpos - *keep;
-    buf[*buflen] = '\0';
-    *keep = 0;
-    return count;
-}
-
-
 static
 struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 {
@@ -562,10 +542,9 @@ struct token* parse_number(struct token* token, const char* t, ssize_t toklen)
 
 
 static
-void lex_line(struct token* token, const int src, unsigned int l,
-        size_t* const bufpos, size_t* const buflen)
+void lex_line(struct token* token, struct buffer* const buffer, unsigned int l)
 {
-    size_t tokstart = *bufpos + 1;
+    size_t tokstart = buffer->pos + 1;
     char c;
     ssize_t toklen;
     bool first_buf = true;
@@ -577,9 +556,9 @@ void lex_line(struct token* token, const int src, unsigned int l,
         // Advance char.
         //
 
-        ++*bufpos;
-        if (*bufpos >= *buflen) {
-            if (fill_buffer(src, bufpos, buflen, &tokstart) == 0) {
+        ++buffer->pos;
+        if (buffer->pos >= buffer->len) {
+            if (fill_buffer(buffer, &tokstart) == 0) {
                 if (first_buf)
                     break;
                 else
@@ -587,13 +566,13 @@ void lex_line(struct token* token, const int src, unsigned int l,
             }
             first_buf = false;
         }
-        c = buf[*bufpos];
+        c = buffer->buf[buffer->pos];
 
         if (ignore)
             continue;
 
         ++col;
-        toklen = *bufpos - tokstart;
+        toklen = buffer->pos - tokstart;
 
         //
         // Process char.
@@ -603,7 +582,7 @@ void lex_line(struct token* token, const int src, unsigned int l,
 
         if (is_sep) {
             if (toklen > 0) {
-                char* t = &buf[tokstart];
+                char* t = buffer->buf + tokstart;
                 if (
                         ('A' <= t[0] && t[0] <= 'Z') ||
                         ('a' <= t[0] && t[0] <= 'z') ||
@@ -638,7 +617,7 @@ void lex_line(struct token* token, const int src, unsigned int l,
         // Start new token.
         //
 
-        tokstart = *bufpos + 1;
+        tokstart = buffer->pos + 1;
     } while (c != '\n');
 
     token->type = T_NONE;
@@ -1324,8 +1303,11 @@ void dump_hex(struct line* start, int len, int16_t* cfg)
 
 void assemble_emr(const int src)
 {
-    size_t bufpos = 0;
-    size_t buflen = 1;
+    struct buffer buffer = {
+        .src = src,
+        .pos = 0,
+        .len = 1,
+    };
 
     struct line* start = NULL;
     struct line* prev_line = NULL;
@@ -1337,12 +1319,12 @@ void assemble_emr(const int src)
     char* label = NULL;
     for (unsigned int l = 1; /* */; ++l) {
         struct token tokens[16];
-        lex_line(tokens, src, l, &bufpos, &buflen);
+        lex_line(tokens, &buffer, l);
         /*if (verbosity >= 2)*/
             /*for (unsigned int i = 0; i < lengthof(tokens) &&*/
                     /*tokens[i].type != T_NONE; ++i)*/
                 /*print_token(&tokens[i]);*/
-        if (buflen == 0)
+        if (buffer.len == 0)
             break;
         struct line* line = parse_line(prev_line, tokens, l, &label);
         if (line != NULL)

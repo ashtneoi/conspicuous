@@ -28,7 +28,7 @@ clean:
 	rm -f $(OBJ) $(EXE)
 
 
-bufman.o: bufman.h common.h
+bufman.o: bufman.h common.h fail.h
 cpic.o: bufman.h common.h
 dict.o: common.h dict.h fail.h
 fail.o: fail.h common.h
