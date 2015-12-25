@@ -69,13 +69,19 @@ struct token next_token(struct buffer* const b)
             return (struct token){ .type = T_EOF };
     }
 
-    if (b->buf[b->pos] == '\n') {
+    if (b->buf[b->pos] == ';' || b->buf[b->pos] == '\n') {
+        while (b->buf[b->pos] != '\n') {
+            b->tok = ++b->pos;
+            if (b->pos == b->end && fill_buffer(b) == 0)
+                return (struct token){ .type = T_EOF };
+        }
         b->tok = ++b->pos;
         return (struct token){ .type = T_EOL };
     }
 
     while (b->buf[b->pos] != ' ' && b->buf[b->pos] != '\t'
-            /*&& b->buf[b->pos] != ',' && b->buf[b->pos] != ';'*/
+            /*&& b->buf[b->pos] != ','*/
+            && b->buf[b->pos] != ';'
             && b->buf[b->pos] != '\n') {
         ++b->pos;
         if (b->pos == b->end && fill_buffer(b) == 0)
