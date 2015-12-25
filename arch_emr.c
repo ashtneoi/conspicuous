@@ -14,37 +14,38 @@
 #include <sys/types.h>
 
 
-#define CHUNK_LEN 128
 #define CFG_MEM_SIZE 0x10
+
+#define INSN_ARRAY_LEN 512
+#define REG_ARRAY_LEN 2048
+#define LABEL_ARRAY_LEN 2048
 
 
 enum token_type {
+    T_CHAR,
     T_TEXT,
     T_NUMBER,
-    T_COLON,
-    T_COMMA,
-    T_NONE,
+    T_EOL,
+    T_EOF,
 };
 
 
 struct token {
     enum token_type type;
     char* text;
-    uint16_t num;
+    int32_t num;
 };
 
 
 static inline
 void print_token(struct token* token)
 {
-    if (token->type == T_TEXT)
-        printf("  text: \"%s\"\n", token->text);
+    if (token->type == T_CHAR)
+        printf("  char: '%c'\n", token->v.chr);
+    else if (token->type == T_TEXT)
+        printf("  text: \"%s\"\n", token->v.text);
     else if (token->type == T_NUMBER)
-        printf("  number: 0x%04"PRIX16"\n", token->num);
-    else if (token->type == T_COLON)
-        print("  colon\n");
-    else if (token->type == T_COMMA)
-        print("  comma\n");
+        printf("  number: 0x%04"PRIX16"\n", token->v.num);
     else
         fatal(1, "Invalid token");
 }
@@ -110,46 +111,48 @@ enum opcode {
 
     C_ADDFSR,
     C_MOVIW,
+    C_MOVIW_M,
+    C_MOVIW_X,
     C_MOVWI,
+    C_MOVWI_M,
+    C_MOVWI_X,
 
     C_MOVPLW,
     C_MOVPHW,
 
     C__LAST__,
 
-    CD_SFR,
     CD_GPR,
+    CD_SFR,
     CD_REG,
     CD_CREG,
     CD_CFG,
 
     CD__LAST__,
-
-    // TODO: Implement more.
 };
 
 
 enum operand_type {
     NONE__ = 0, // none
-    F, // register
-    B, // bit number (0 - 7)
-    K, // miscellaneous number
-    L, // program address or label
-    D, // destination select (0 = W, 1 = f)
-    T, // TRIS operand (5 - 7)
-    N, // FSR number
-    M, // FSR number with pre-/post-decrement/-increment
-    A, // bank number
-    I, // new identifier
+    R, // register name
+    D, // destination select
+    B, // bit name or U3
+    I, // signed int
+    U, // unsigned int
+    J, // signed int or constant
+    V, // unsigned int or constant
+    M, // "FSR0++", e.g.
+    X, // I6[F]
+    Y, // J6[F]
+    F, // FSR0 or FSR1
 };
 
 
 struct insn {
-    const char* str;
+    const char* label;
     enum opcode opc;
     uint16_t word;
-    enum operand_type opds[2];
-    int kwid;
+    enum operand_type opds[4];
 } insn_array[512];
 
 
@@ -164,26 +167,13 @@ struct reg {
     const char* name;
     int bank;
     int addr;
-} reg_array[2048];
+} reg_array[4096];
 
 
 struct dict regs = {
     .array = reg_array,
     .capacity = lengthof(reg_array),
     .value_len = sizeof(struct reg),
-};
-
-
-struct creg {
-    const char* name;
-    int addr;
-} creg_array[128];
-
-
-struct dict cregs = {
-    .array = creg_array,
-    .capacity = lengthof(creg_array),
-    .value_len = sizeof(struct creg),
 };
 
 
@@ -201,41 +191,41 @@ struct dict labels = {
 
 
 struct insn insns_ref[] = {
-    { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {F, D} },
-    { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {F, D} },
-    { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {F, D} },
-    { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {F, D} },
-    { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {F, D} },
-    { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {F, D} },
-    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {F, 0} },
-    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0, 0} },
-    { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {F, D} },
-    { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {F, D} },
-    { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {F, D} },
-    { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {F, D} },
-    { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {F, D} },
-    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {F, 0} },
-    { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {F, D} },
-    { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {F, D} },
-    { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {F, D} },
-    { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {F, D} },
-    { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {F, D} },
-    { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {F, D} },
+    { .opc = C_ADDWF, .str = "addwf", .word = 0x0700, .opds = {R, D, 0} },
+    { .opc = C_ADDWFC, .str = "addwfc", .word = 0x3D00, .opds = {R, D, 0} },
+    { .opc = C_ANDWF, .str = "andwf", .word = 0x0500, .opds = {R, D, 0} },
+    { .opc = C_ASRF, .str = "asrf", .word = 0x3700, .opds = {R, D, 0} },
+    { .opc = C_LSLF, .str = "lslf", .word = 0x3500, .opds = {R, D, 0} },
+    { .opc = C_LSRF, .str = "lsrf", .word = 0x3600, .opds = {R, D, 0} },
+    { .opc = C_CLRF, .str = "clrf", .word = 0x0180, .opds = {R, 0} },
+    { .opc = C_CLRW, .str = "clrw", .word = 0x0100, .opds = {0} },
+    { .opc = C_COMF, .str = "comf", .word = 0x0900, .opds = {R, D, 0} },
+    { .opc = C_DECF, .str = "decf", .word = 0x300, .opds = {R, D, 0} },
+    { .opc = C_INCF, .str = "incf", .word = 0x0A00, .opds = {R, D, 0} },
+    { .opc = C_IORWF, .str = "iorwf", .word = 0x0400, .opds = {R, D, 0} },
+    { .opc = C_MOVF, .str = "movf", .word = 0x0800, .opds = {R, D, 0} },
+    { .opc = C_MOVWF, .str = "movwf", .word = 0x0080, .opds = {R, 0} },
+    { .opc = C_RLF, .str = "rlf", .word = 0x0D00, .opds = {R, D, 0} },
+    { .opc = C_RRF, .str = "rrf", .word = 0x0C00, .opds = {R, D, 0} },
+    { .opc = C_SUBWF, .str = "subwf", .word = 0x0200, .opds = {R, D, 0} },
+    { .opc = C_SUBWFB, .str = "subwfb", .word = 0x3B00, .opds = {R, D, 0} },
+    { .opc = C_SWAPF, .str = "swapf", .word = 0x0E00, .opds = {R, D, 0} },
+    { .opc = C_XORWF, .str = "xorwf", .word = 0x0600, .opds = {R, D, 0} },
 
-    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0B00, .opds = {F, D} },
-    { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {F, D} },
+    { .opc = C_DECFSZ, .str = "decfsz", .word = 0x0B00, .opds = {R, D, 0} },
+    { .opc = C_INCFSZ, .str = "incfsz", .word = 0x0F00, .opds = {R, D} },
 
-    { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {F, B} },
-    { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {F, B} },
+    { .opc = C_BCF, .str = "bcf", .word = 0x1000, .opds = {R, B, 0} },
+    { .opc = C_BSF, .str = "bsf", .word = 0x1400, .opds = {R, B, 0} },
 
-    { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {F, B} },
-    { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {F, B} },
+    { .opc = C_BTFSC, .str = "btfsc", .word = 0x1800, .opds = {R, B, 0} },
+    { .opc = C_BTFSS, .str = "btfss", .word = 0x1C00, .opds = {R, B, 0} },
 
-    { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {K, 0},
+    { .opc = C_ADDLW, .str = "addlw", .word = 0x3E00, .opds = {J, 0},
         .kwid = 8 },
-    { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {K, 0},
+    { .opc = C_ANDLW, .str = "andlw", .word = 0x3900, .opds = {J, 0},
         .kwid = 8 },
-    { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {K, 0},
+    { .opc = C_IORLW, .str = "iorlw", .word = 0x3800, .opds = {J, 0},
         .kwid = 8 },
     { .opc = C_MOVLB, .str = "movlb", .word = 0x0020, .opds = {F, 0},
         .kwid = 5 },
@@ -249,25 +239,25 @@ struct insn insns_ref[] = {
         .kwid = 8 },
 
     { .opc = C_BRA, .str = "bra", .word = 0x3200, .opds = {L, 0}, .kwid = 9 },
-    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0, 0} },
+    { .opc = C_BRW, .str = "brw", .word = 0x000B, .opds = {0} },
     { .opc = C_CALL, .str = "call", .word = 0x2000, .opds = {L, 0},
         .kwid = 11 },
-    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0, 0} },
+    { .opc = C_CALLW, .str = "callw", .word = 0x000A, .opds = {0} },
     { .opc = C_GOTO, .str = "goto", .word = 0x2800, .opds = {L, 0},
         .kwid = 11 },
-    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0, 0} },
+    { .opc = C_RETFIE, .str = "retfie", .word = 0x0009, .opds = {0} },
     { .opc = C_RETLW, .str = "retlw", .word = 0x3400, .opds = {K, 0},
         .kwid = 8 },
-    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0, 0} },
+    { .opc = C_RETURN, .str = "return", .word = 0x0008, .opds = {0} },
 
-    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0, 0} },
-    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0, 0} },
-    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0, 0} },
-    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0, 0} },
-    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0, 0} },
+    { .opc = C_CLRWDT, .str = "clrwdt", .word = 0x0064, .opds = {0} },
+    { .opc = C_NOP, .str = "nop", .word = 0x0000, .opds = {0} },
+    { .opc = C_OPTION, .str = "option", .word = 0x0062, .opds = {0} },
+    { .opc = C_RESET, .str = "reset", .word = 0x0001, .opds = {0} },
+    { .opc = C_SLEEP, .str = "sleep", .word = 0x0063, .opds = {0} },
     { .opc = C_TRIS, .str = "tris", .word = 0x0060, .opds = {T, 0} },
 
-    { .opc = C_ADDFSR, .str = "addfsr", .word = 0x3100, .opds = {N, K},
+    { .opc = C_ADDFSR, .str = "addfsr", .word = 0x3100, .opds = {N, K, 0},
         .kwid=6 },
     { .opc = C_MOVIW, .str = "moviw", .word = 0x0010, .opds = {M, 0} },
     { .opc = C_MOVWI, .str = "movwi", .word = 0x0018, .opds = {M, 0} },
@@ -275,11 +265,11 @@ struct insn insns_ref[] = {
     { .opc = C_MOVPLW, .str = "movplw", .opds = {L, 0} },
     { .opc = C_MOVPHW, .str = "movphw", .opds = {L, 0} },
 
-    { .opc = CD_SFR, .str = ".sfr", .opds = {F, I} },
-    { .opc = CD_GPR, .str = ".gpr", .opds = {F, F} },
-    { .opc = CD_REG, .str = ".reg", .opds = {A, I} },
+    { .opc = CD_SFR, .str = ".sfr", .opds = {F, I, 0} },
+    { .opc = CD_GPR, .str = ".gpr", .opds = {F, F, 0} },
+    { .opc = CD_REG, .str = ".reg", .opds = {A, I, 0} },
     { .opc = CD_CREG, .str = ".creg", .opds = {I, 0} },
-    { .opc = CD_CFG, .str = ".cfg", .opds = {K, K}, .kwid = 16 },
+    { .opc = CD_CFG, .str = ".cfg", .opds = {K, K, 0}, .kwid = 16 },
 };
 
 

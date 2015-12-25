@@ -6,7 +6,7 @@
 #include <sys/types.h>
 
 
-#define CHUNK_LEN 128
+#define CHUNK_LEN 256
 
 
 struct buffer {
