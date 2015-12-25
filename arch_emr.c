@@ -120,8 +120,5 @@ void assemble_emr(const int src)
         } else {
             print("???\n");
         }
-
-
-        b.tok = b.end;
     }
 }
