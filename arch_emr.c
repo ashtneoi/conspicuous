@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 
-#define CHUNK_LEN 4
+#define CHUNK_LEN 256
 
 
 struct buffer {
@@ -69,7 +69,10 @@ struct token next_token(struct buffer* const b)
             return (struct token){ .type = T_EOF };
     }
 
-    if (b->buf[b->pos] == ';' || b->buf[b->pos] == '\n') {
+    if (b->buf[b->pos] == ',') {
+        b->tok = ++b->pos;
+        return (struct token){ .type = T_CHAR, .num = ',' };
+    } else if (b->buf[b->pos] == ';' || b->buf[b->pos] == '\n') {
         while (b->buf[b->pos] != '\n') {
             b->tok = ++b->pos;
             if (b->pos == b->end && fill_buffer(b) == 0)
@@ -80,8 +83,7 @@ struct token next_token(struct buffer* const b)
     }
 
     while (b->buf[b->pos] != ' ' && b->buf[b->pos] != '\t'
-            /*&& b->buf[b->pos] != ','*/
-            && b->buf[b->pos] != ';'
+            && b->buf[b->pos] != ',' && b->buf[b->pos] != ';'
             && b->buf[b->pos] != '\n') {
         ++b->pos;
         if (b->pos == b->end && fill_buffer(b) == 0)
@@ -115,16 +117,17 @@ void assemble_emr(const int src)
         struct token tkn = next_token(&b);
 
         if (tkn.type == T_TEXT) {
+            putchar('\"');
             for (size_t i = 0; i < (size_t)tkn.num; ++i)
                 putchar(tkn.text[i]);
-            putchar('\n');
+            print("\"\n");
         } else if (tkn.type == T_EOL) {
             print("EOL\n");
         } else if (tkn.type == T_EOF) {
             print("EOF\n");
             break;
-        } else {
-            print("???\n");
+        } else if (tkn.type == T_CHAR) {
+            printf("'%c'\n", (char)tkn.num);
         }
     }
 }
