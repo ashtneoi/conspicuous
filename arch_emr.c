@@ -82,9 +82,7 @@ struct token next_token(struct buffer* const b)
         return (struct token){ .type = T_EOL };
     }
 
-    while (b->buf[b->pos] != ' ' && b->buf[b->pos] != '\t'
-            && b->buf[b->pos] != ',' && b->buf[b->pos] != ';'
-            && b->buf[b->pos] != '\n') {
+    while (strchr(" \t,;\n", b->buf[b->pos]) == NULL) {
         ++b->pos;
         if (b->pos == b->end && fill_buffer(b) == 0)
             return (struct token){ .type = T_EOF };
