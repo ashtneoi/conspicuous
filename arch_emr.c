@@ -31,7 +31,7 @@ ssize_t fill_buffer(struct buffer* const b)
     memmove(b->buf, b->buf + b->tok, b->end - b->tok);
     b->pos = b->end - b->tok;
     b->tok = 0;
-    ssize_t count = read(b->src, b->buf + b->pos, CHUNK_LEN - b->pos);
+    ssize_t count = read(b->src, b->buf + b->pos, CHUNK_LEN);
     if (count == -1) {
         fatal_e(E_COMMON, "Can't read from input file");
     } else if (count == 0) {
