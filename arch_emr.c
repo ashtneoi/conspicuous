@@ -111,7 +111,6 @@ void assemble_emr(const int src)
     }
 
     while (true) {
-        /*next_token(&b);*/
         struct token tkn = next_token(&b);
 
         if (tkn.type == T_TEXT) {
