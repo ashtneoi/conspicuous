@@ -5,7 +5,7 @@ MAKEFLAGS += --no-builtin-rules
 
 
 EXE_SRC := cpic.c
-SRC := $(EXE_SRC) bufman.c dict.c fail.c arch_emr.c
+SRC := $(EXE_SRC) dict.c fail.c arch_emr.c
 
 OBJ := $(SRC:%.c=%.o)
 EXE := $(EXE_SRC:%.c=%)
@@ -28,13 +28,12 @@ clean:
 	rm -f $(OBJ) $(EXE)
 
 
-bufman.o: bufman.h common.h fail.h
-cpic.o: bufman.h common.h
+cpic.o: common.h
 dict.o: common.h dict.h fail.h
 fail.o: fail.h common.h
 arch_emr.o: arch_emr.h common.h fail.h cpic.h utils.h
 
-cpic: bufman.o dict.o fail.o arch_emr.o
+cpic: dict.o fail.o arch_emr.o
 
 
 .DEFAULT_GOAL := all

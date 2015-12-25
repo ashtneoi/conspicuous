@@ -1,6 +1,5 @@
 #include "cpic.h"
 
-#include "bufman.h"
 #include "fail.h"
 #include "arch_emr.h"
 #include "utils.h"
