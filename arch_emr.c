@@ -65,15 +65,17 @@ struct token next_token(struct buffer* const b, int l)
     if (b->pos == b->end && fill_buffer(b) == 0)
         return (struct token){ .type = T_EOF };
 
-    while (b->buf[b->pos] == ' ' || b->buf[b->pos] == '\t') {
+    while (b->buf[b->pos] == ' ' || b->buf[b->pos] == '\t'
+            || b->buf[b->pos] == '\0') {
         b->tok = ++b->pos;
         if (b->pos == b->end && fill_buffer(b) == 0)
             return (struct token){ .type = T_EOF };
     }
 
     if (b->buf[b->pos] == ',' || b->buf[b->pos] == ':') {
+        struct token tkn = { .type = T_CHAR, .num = b->buf[b->pos] };
         b->tok = ++b->pos;
-        return (struct token){ .type = T_CHAR, .num = b->buf[b->pos] };
+        return tkn;
     } else if (b->buf[b->pos] == ';' || b->buf[b->pos] == '\n') {
         while (b->buf[b->pos] != '\n') {
             b->tok = ++b->pos;
@@ -263,8 +265,10 @@ struct line parse_line(struct buffer* b, int l)
 
     struct token first = next_token(b, l);
 
-    if (first.type == T_EOL || first.type == T_EOF)
+    if (first.type == T_EOL)
         return line;
+    else if (first.type == T_EOF)
+        return (struct line){ .label = NULL, .num = -1, .cmd = NULL };
     else if (first.type != T_TEXT)
         fatal(E_COMMON, "%d: Expected label, opcode, or directive", l);
 
@@ -285,17 +289,24 @@ struct line parse_line(struct buffer* b, int l)
 
         cmd = next_token(b, l);
 
-        if (first.type == T_EOL)
+        if (cmd.type == T_EOL)
             return line;
-        else if (first.type != T_TEXT)
-            fatal(E_COMMON, "%d: Expected label, opcode, or directive", l);
+        else if (cmd.type != T_TEXT)
+            fatal(E_COMMON, "%d: Expected opcode or directive", l);
+
+        b->buf[b->pos] = '\0';
+        printf("%s\n", cmd.text);
 
         ci = dict_get(&cmdinfo, cmd.text);
+        if (ci == NULL)
+            fatal(E_COMMON, "%d: Invalid opcode or directive \"%s\"", l,
+                cmd.text);
     } else {
         ci = dict_get(&cmdinfo, first_text);
+        if (ci == NULL)
+            fatal(E_COMMON, "%d: Invalid opcode or directive \"%s\"", l,
+                first_text);
     }
-    if (ci == NULL)
-        fatal(E_COMMON, "%d: Invalid opcode or directive", l);
     line.cmd = ci->cmd;
 
     while (next_token(b, l).type != T_EOL) { };
@@ -329,11 +340,20 @@ void assemble_emr(const int src)
     }
 
     int l = 1;
+    char* label = NULL;
     while (true) {
         struct line line = parse_line(&b, l);
-        if (line.cmd == NULL)
+        if (line.num == -1) {
             break;
-        print_line(&line);
+        } else if (line.cmd == NULL) {
+            if (line.label != NULL)
+                label = line.label;
+        } else {
+            if (line.label == NULL)
+                line.label = label;
+            label = NULL;
+            print_line(&line);
+        }
         ++l;
     }
 }
