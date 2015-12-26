@@ -15,7 +15,7 @@
 
 
 struct buffer {
-    char buf[CHUNK_LEN * 2];
+    char buf[CHUNK_LEN * 2 + 1];
     const int src;
     size_t end;
     size_t tok;
@@ -58,7 +58,7 @@ struct token {
 
 
 static
-struct token next_token(struct buffer* const b)
+struct token next_token(struct buffer* const b, int l)
 {
     if (b->pos == b->end && fill_buffer(b) == 0)
         return (struct token){ .type = T_EOF };
@@ -88,6 +88,76 @@ struct token next_token(struct buffer* const b)
             return (struct token){ .type = T_EOF };
     }
 
+    char* chr = b->buf + b->tok;
+    const char* const tknend = b->buf + b->pos;
+
+    bool negative = false;
+    if (*chr == '-') {
+        ++chr;
+        negative = true;
+    }
+
+    if (*chr == '0') {
+        ++chr;
+        struct token t = { .type = T_NUM, .num = 0 };
+        if (chr == tknend) {
+            return t;
+        } else if (*chr == 'x') {
+            // hex
+            while (++chr < tknend) {
+                int digit;
+                if ('0' <= *chr && *chr <= '9')
+                    digit = *chr - '0';
+                else if ('A' <= *chr && *chr <= 'F')
+                    digit = 0xA + *chr - 'A';
+                else if ('a' <= *chr && *chr <= 'f')
+                    digit = 0xA + *chr - 'a';
+                else if (*chr == '_')
+                    continue;
+                else
+                    fatal(E_COMMON, "%d: Invalid hexadecimal integer", l);
+                t.num = (t.num << 4) + digit;
+            }
+        } else if (*chr == 'n' || *chr == 'b') {
+            // binary
+            while (++chr < tknend) {
+                if (*chr == '0' || *chr == '1')
+                    t.num = (t.num << 1) + *chr - '0';
+                else if (*chr == '_')
+                    continue;
+                else
+                    fatal(E_COMMON, "%d: Invalid binary integer", l);
+            }
+        } else if (*chr == 'c') {
+            // octal
+            while (++chr < tknend) {
+                if ('0' <= *chr && *chr <= '7')
+                    t.num = (t.num << 3) + *chr - '0';
+                else if (*chr == '_')
+                    continue;
+                else
+                    fatal(E_COMMON, "%d: Invalid octal integer", l);
+            }
+        } else {
+            fatal(E_COMMON, "%d: Invalid integer", l);
+        }
+        if (negative)
+            t.num = -t.num;
+        return t;
+    } else if ('1' <= *chr && *chr <= '9') {
+        // decimal
+        struct token t = { .type = T_NUM, .num = 0 };
+        do {
+            if ('0' <= *chr && *chr <= '9')
+                t.num = t.num * 10 + *chr - '0';
+            else
+                fatal(E_COMMON, "%d: Invalid decimal integer", l);
+        } while (++chr < tknend);
+        if (negative)
+            t.num = -t.num;
+        return t;
+    }
+
     return (struct token){
         .type = T_TEXT,
         .text = b->buf + b->tok,
@@ -110,8 +180,9 @@ void assemble_emr(const int src)
         return;
     }
 
+    int l = 1;
     while (true) {
-        struct token tkn = next_token(&b);
+        struct token tkn = next_token(&b, l);
 
         if (tkn.type == T_TEXT) {
             putchar('\"');
@@ -120,11 +191,14 @@ void assemble_emr(const int src)
             print("\"\n");
         } else if (tkn.type == T_EOL) {
             print("EOL\n");
+            ++l;
         } else if (tkn.type == T_EOF) {
             print("EOF\n");
             break;
         } else if (tkn.type == T_CHAR) {
             printf("'%c'\n", (char)tkn.num);
+        } else if (tkn.type == T_NUM) {
+            printf("0x%X\n", tkn.num);
         }
     }
 }
