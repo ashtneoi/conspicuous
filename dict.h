@@ -7,7 +7,7 @@
 
 
 struct dict {
-    void* array;
+    void* const array;
     const size_t capacity;
     const size_t value_len;
 };

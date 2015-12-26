@@ -13,6 +13,8 @@
 
 #define CHUNK_LEN 256
 
+#define OPDS_LEN 4
+
 
 struct buffer {
     char buf[CHUNK_LEN * 2 + 1];
@@ -69,9 +71,9 @@ struct token next_token(struct buffer* const b, int l)
             return (struct token){ .type = T_EOF };
     }
 
-    if (b->buf[b->pos] == ',') {
+    if (b->buf[b->pos] == ',' || b->buf[b->pos] == ':') {
         b->tok = ++b->pos;
-        return (struct token){ .type = T_CHAR, .num = ',' };
+        return (struct token){ .type = T_CHAR, .num = b->buf[b->pos] };
     } else if (b->buf[b->pos] == ';' || b->buf[b->pos] == '\n') {
         while (b->buf[b->pos] != '\n') {
             b->tok = ++b->pos;
@@ -82,7 +84,7 @@ struct token next_token(struct buffer* const b, int l)
         return (struct token){ .type = T_EOL };
     }
 
-    while (strchr(" \t,;\n", b->buf[b->pos]) == NULL) {
+    while (strchr(" \t,:;\n", b->buf[b->pos]) == NULL) {
         ++b->pos;
         if (b->pos == b->end && fill_buffer(b) == 0)
             return (struct token){ .type = T_EOF };
@@ -166,8 +168,154 @@ struct token next_token(struct buffer* const b, int l)
 }
 
 
+enum opd {
+    OPD__NONE__ = 0,
+
+    R, // register name
+    D, // destination select
+    B, // bit name or U3
+    I, // signed integer
+    U, // unsigned integer
+    J, // signed integer or constant
+    V, // unsigned integer or constant
+    M, // "FSR0++", e.g.
+    X, // I6[F]
+    Y, // J6[F]
+    F, // FSR0 or FSR1
+    A, // R or U5 (bank)
+    L, // program label
+    T, // TRISA, TRISB, or TRISC
+
+    N, // new identifier
+    E, // register definition
+};
+
+
+struct cmdinfo {
+    const char* str;
+    enum opd opds[OPDS_LEN];
+    uint8_t wids[OPDS_LEN];
+};
+
+
+enum cmd {
+    C__NONE__ = 0,
+
+    C_ADDWF,
+
+    C__LAST__,
+
+    D_SFR,
+
+    D__LAST__,
+};
+
+
+struct cmdinfo cmdinfo_init[] = {
+    [C__NONE__] = { .str = NULL },
+
+    [C_ADDWF] = { .str = "addwf", .opds = {R, D, 0} },
+
+    [C__LAST__] = { .str = NULL },
+
+    [D_SFR] = { .str = ".sfr", .opds = {N, E, 0} },
+
+    [D__LAST__] = { .str = NULL },
+};
+
+
+struct cmdinfo_item {
+    const char* str;
+    struct cmdinfo* cmd;
+} cmdinfo_array[256];
+
+
+struct dict cmdinfo = {
+    .array = cmdinfo_array,
+    .capacity = lengthof(cmdinfo_array),
+    .value_len = sizeof(struct cmdinfo_item),
+};
+
+
+struct line {
+    char* label;
+    int num;
+    struct cmdinfo* cmd;
+};
+
+
+void print_line(struct line* line)
+{
+    if (line->label != NULL)
+        printf("%s: ", line->label);
+
+    printf("%s\n", line->cmd->str);
+}
+
+
+struct line parse_line(struct buffer* b, int l)
+{
+    struct line line = {
+        .label = NULL,
+        .num = l,
+        .cmd = NULL,
+    };
+
+    struct token first = next_token(b, l);
+
+    if (first.type == T_EOL || first.type == T_EOF)
+        return line;
+    else if (first.type != T_TEXT)
+        fatal(E_COMMON, "%d: Expected label, opcode, or directive", l);
+
+    char first_text[first.num + 1];
+    memcpy(first_text, first.text, first.num);
+    first_text[first.num] = '\0';
+
+    struct token tkn = next_token(b, l);
+
+    struct token cmd;
+    struct cmdinfo_item* ci;
+
+    if (tkn.type == T_CHAR) {
+        if (tkn.num != ':')
+            fatal(E_COMMON, "%d: Expected colon, operand, or newline", l);
+        line.label = malloc(first.num + 1);
+        strcpy(line.label, first_text);
+
+        cmd = next_token(b, l);
+
+        if (first.type == T_EOL)
+            return line;
+        else if (first.type != T_TEXT)
+            fatal(E_COMMON, "%d: Expected label, opcode, or directive", l);
+
+        ci = dict_get(&cmdinfo, cmd.text);
+    } else {
+        ci = dict_get(&cmdinfo, first_text);
+    }
+    if (ci == NULL)
+        fatal(E_COMMON, "%d: Invalid opcode or directive", l);
+    line.cmd = ci->cmd;
+
+    while (next_token(b, l).type != T_EOL) { };
+
+    return line;
+}
+
+
 void assemble_emr(const int src)
 {
+    dict_init(&cmdinfo);
+
+    for (enum cmd c = 0; c <= D__LAST__; ++c) {
+        if (cmdinfo_init[c].str == NULL)
+            continue;
+        struct cmdinfo_item* item = dict_avail(&cmdinfo, cmdinfo_init[c].str);
+        item->str = cmdinfo_init[c].str;
+        item->cmd = cmdinfo_init + c;
+    }
+
     struct buffer b = {
         .src = src,
         .end = 0,
@@ -182,23 +330,10 @@ void assemble_emr(const int src)
 
     int l = 1;
     while (true) {
-        struct token tkn = next_token(&b, l);
-
-        if (tkn.type == T_TEXT) {
-            putchar('\"');
-            for (size_t i = 0; i < (size_t)tkn.num; ++i)
-                putchar(tkn.text[i]);
-            print("\"\n");
-        } else if (tkn.type == T_EOL) {
-            print("EOL\n");
-            ++l;
-        } else if (tkn.type == T_EOF) {
-            print("EOF\n");
+        struct line line = parse_line(&b, l);
+        if (line.cmd == NULL)
             break;
-        } else if (tkn.type == T_CHAR) {
-            printf("'%c'\n", (char)tkn.num);
-        } else if (tkn.type == T_NUM) {
-            printf("0x%X\n", tkn.num);
-        }
+        print_line(&line);
+        ++l;
     }
 }
