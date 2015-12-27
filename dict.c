@@ -7,7 +7,7 @@
 #include <string.h>
 
 
-#define arrind(d, i) ((char*)((d)->array) + (i) * (d)->value_len)
+#define arrind(d, i) ((char*)((d)->array) + (i) * (d)->item_len)
 
 
 // djb2 by Dan Bernstein

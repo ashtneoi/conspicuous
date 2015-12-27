@@ -225,11 +225,32 @@ struct cmdinfo_item {
 } cmdinfo_array[256];
 
 
-struct dict cmdinfo = {
-    .array = cmdinfo_array,
-    .capacity = lengthof(cmdinfo_array),
-    .value_len = sizeof(struct cmdinfo_item),
+dict_define(cmdinfo, cmdinfo_array);
+
+
+struct reginfo {
+    const char* name;
+    int bank;
+    int addr;
+} reginfo_array[256];
+
+struct reginfo reginfo_init[] = {
+    { .name = "INDF0", .bank = -1, .addr = 0x00 },
+    { .name = "INDF1", .bank = -1, .addr = 0x01 },
+    { .name = "PCL", .bank = -1, .addr = 0x02 },
+    { .name = "STATUS", .bank = -1, .addr = 0x03 },
+    { .name = "FSR0L", .bank = -1, .addr = 0x04 },
+    { .name = "FSR0H", .bank = -1, .addr = 0x05 },
+    { .name = "FSR1L", .bank = -1, .addr = 0x06 },
+    { .name = "FSR1H", .bank = -1, .addr = 0x07 },
+    { .name = "BSR", .bank = -1, .addr = 0x08 },
+    { .name = "WREG", .bank = -1, .addr = 0x09 },
+    { .name = "PCLATH", .bank = -1, .addr = 0x0A },
+    { .name = "INTCON", .bank = -1, .addr = 0x0B },
 };
+
+
+dict_define(reginfo, reginfo_array);
 
 
 struct line {
@@ -238,6 +259,7 @@ struct line {
     struct cmdinfo* cmd;
     union {
         int32_t i;
+        char* s;
     } opds[OPDS_LEN];
 };
 
@@ -340,6 +362,7 @@ struct line parse_line(struct buffer* b, int l)
         if (line.cmd->opds[o] == I) {
             if (tkn.type != T_NUM)
                 fatal(E_COMMON, "%d: Expected number", l);
+
             line.opds[o].i = tkn.num;
         } else if (line.cmd->opds[o] == D) {
             if ( !(tkn.type == T_TEXT && tkn.num == 1) )
@@ -351,6 +374,13 @@ struct line parse_line(struct buffer* b, int l)
                 line.opds[o].i = 1;
             else
                 fatal(E_COMMON, "%d: Expected destination select", l);
+        } else if (line.cmd->opds[o] == R) {
+            if (tkn.type != T_TEXT)
+                fatal(E_COMMON, "%d: Expected register name", l);
+
+            line.opds[o].s = malloc(tkn.num + 1);
+            memcpy(line.opds[o].s, tkn.text, tkn.num);
+            line.opds[o].s[tkn.num] = '\0';
         } else {
             fatal(E_RARE, "%d: Unimplemented operand type", l);
         }
@@ -376,6 +406,12 @@ void assemble_emr(const int src)
         item->str = cmdinfo_init[c].str;
         item->cmd = cmdinfo_init + c;
     }
+
+    dict_init(&reginfo);
+
+    for (size_t i = 0; i < lengthof(reginfo_init); ++i)
+        *(struct reginfo*)dict_avail(&reginfo, reginfo_init[i].name) =
+            reginfo_init[i];
 
     struct buffer b = {
         .src = src,
