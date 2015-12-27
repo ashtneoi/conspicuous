@@ -266,6 +266,7 @@ struct line {
 
 void print_line(struct line* line)
 {
+    printf("[%4d]  ", line->num);
     if (line->label != NULL)
         printf("%s: ", line->label);
 
@@ -328,12 +329,13 @@ struct line parse_line(struct buffer* b, int l)
             fatal(E_COMMON, "%d: Expected opcode or directive", l);
 
         b->buf[b->pos] = '\0';
-        printf("%s\n", cmd.text);
 
         ci = dict_get(&cmdinfo, cmd.text);
         if (ci == NULL)
             fatal(E_COMMON, "%d: Invalid opcode or directive \"%s\"", l,
                 cmd.text);
+
+        tkn = next_token(b, l);
     } else {
         ci = dict_get(&cmdinfo, first_text);
         if (ci == NULL)
