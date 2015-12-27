@@ -13,7 +13,7 @@
 
 #define CHUNK_LEN 256
 
-#define OPDS_LEN 4
+#define OPDS_LEN 3
 
 
 struct buffer {
@@ -204,6 +204,7 @@ enum cmd {
     C__NONE__ = 0,
 
     C_ADDWF,
+    C_MOVLW,
 
     C__LAST__,
 
@@ -217,6 +218,7 @@ struct cmdinfo cmdinfo_init[] = {
     [C__NONE__] = { .str = NULL },
 
     [C_ADDWF] = { .str = "addwf", .opds = {R, D, 0} },
+    [C_MOVLW] = { .str = "movlw", .opds = {I, 0} },
 
     [C__LAST__] = { .str = NULL },
 
@@ -243,6 +245,9 @@ struct line {
     char* label;
     int num;
     struct cmdinfo* cmd;
+    union {
+        int32_t i;
+    } opds[OPDS_LEN];
 };
 
 
@@ -251,7 +256,18 @@ void print_line(struct line* line)
     if (line->label != NULL)
         printf("%s: ", line->label);
 
-    printf("%s\n", line->cmd->str);
+    printf("%s", line->cmd->str);
+
+    for (int o = 0; o < OPDS_LEN; ++o) {
+        if (line->cmd->opds[o] == 0)
+            break;
+        if (o != 0)
+            putchar(',');
+        if (line->cmd->opds[o] == I)
+            printf(" 0x%X", line->opds[o].i);
+    }
+
+    putchar('\n');
 }
 
 
@@ -309,7 +325,45 @@ struct line parse_line(struct buffer* b, int l)
     }
     line.cmd = ci->cmd;
 
-    while (next_token(b, l).type != T_EOL) { };
+    for (int o = 0; o < OPDS_LEN && line.cmd->opds[o] != 0; ++o) {
+        if (tkn.type == T_EOL) {
+            if (line.cmd->opds[o] == 0
+                    || (line.cmd->opds[o] == D && line.cmd->opds[o + 1] == 0))
+                break;
+            else
+                fatal(E_COMMON, "%d: Unexpected newline", l);
+        }
+
+        if (o > 0) {
+            if ( !(tkn.type == T_CHAR && tkn.num == ',') )
+                fatal(E_COMMON, "%d: Expected comma", l);
+
+            tkn = next_token(b, l);
+        }
+
+        if (line.cmd->opds[o] == I) {
+            if (tkn.type != T_NUM)
+                fatal(E_COMMON, "%d: Expected number", l);
+            line.opds[o].i = tkn.num;
+        } else if (line.cmd->opds[o] == D) {
+            if ( !(tkn.type == T_TEXT && tkn.num == 1) )
+                fatal(E_COMMON, "%d: Expected destination select", l);
+
+            if (tkn.text[0] == 'w' || tkn.text[0] == 'W')
+                line.opds[o].i = 0;
+            else if (tkn.text[0] == 'f' || tkn.text[0] == 'F')
+                line.opds[o].i = 1;
+            else
+                fatal(E_COMMON, "%d: Expected destination select", l);
+        } else {
+            fatal(E_RARE, "%d: Unimplemented operand type", l);
+        }
+
+        tkn = next_token(b, l);
+    }
+
+    if (tkn.type != T_EOL)
+        fatal(E_COMMON, "%d: Trailing characters", l);
 
     return line;
 }
