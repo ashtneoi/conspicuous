@@ -327,11 +327,12 @@ struct line parse_line(struct buffer* b, int l)
 
     for (int o = 0; o < OPDS_LEN && line.cmd->opds[o] != 0; ++o) {
         if (tkn.type == T_EOL) {
-            if (line.cmd->opds[o] == 0
-                    || (line.cmd->opds[o] == D && line.cmd->opds[o + 1] == 0))
+            if (line.cmd->opds[o] == D && line.cmd->opds[o + 1] == 0) {
+                line.opds[o].i = 1;
                 break;
-            else
+            } else {
                 fatal(E_COMMON, "%d: Unexpected newline", l);
+            }
         }
 
         if (o > 0) {
