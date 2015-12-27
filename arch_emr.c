@@ -15,6 +15,20 @@
 
 #define OPDS_LEN 3
 
+#define R 0x0001
+#define D 0x0002
+#define B 0x0004
+#define I 0x0008
+#define U 0x0010
+#define M 0x0020
+#define X 0x0040
+#define F 0x0080
+#define A 0x0100
+#define L 0x0200
+#define T 0x0400
+#define N 0x0800
+#define E 0x1000
+
 
 struct buffer {
     char buf[CHUNK_LEN * 2 + 1];
@@ -170,32 +184,9 @@ struct token next_token(struct buffer* const b, int l)
 }
 
 
-enum opd {
-    OPD__NONE__ = 0,
-
-    R, // register name
-    D, // destination select
-    B, // bit name or U3
-    I, // signed integer
-    U, // unsigned integer
-    J, // signed integer or constant
-    V, // unsigned integer or constant
-    M, // "FSR0++", e.g.
-    X, // I6[F]
-    Y, // J6[F]
-    F, // FSR0 or FSR1
-    A, // R or U5 (bank)
-    L, // program label
-    T, // TRISA, TRISB, or TRISC
-
-    N, // new identifier
-    E, // register definition
-};
-
-
 struct cmdinfo {
     const char* str;
-    enum opd opds[OPDS_LEN];
+    uint16_t opds[OPDS_LEN];
     uint8_t wids[OPDS_LEN];
 };
 
@@ -263,8 +254,12 @@ void print_line(struct line* line)
             break;
         if (o != 0)
             putchar(',');
-        if (line->cmd->opds[o] == I)
+        if (line->cmd->opds[o] & (I | U ))
             printf(" 0x%X", line->opds[o].i);
+        else if (line->cmd->opds[o] == D)
+            printf(" %c", line->opds[o].i ? 'f' : 'w');
+        else if (line->cmd->opds[o] & (R | L))
+            printf(" %s", line->opds[o].s);
     }
 
     putchar('\n');
