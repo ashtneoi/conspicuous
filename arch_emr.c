@@ -15,19 +15,21 @@
 
 #define OPDS_LEN 3
 
-#define R 0x0001
-#define D 0x0002
-#define B 0x0004
-#define I 0x0008
-#define U 0x0010
-#define M 0x0020
-#define X 0x0040
-#define F 0x0080
-#define A 0x0100
-#define L 0x0200
-#define T 0x0400
-#define N 0x0800
-#define E 0x1000
+#define U3  0x0001
+#define U5  0x0002
+#define U7  0x0004
+#define U8  0x0008
+#define U12 0x0010
+#define I6  0x0020
+#define L9  0x0040 // 9-bit signed relative label
+#define L11 0x0080 // 11-bit unsigned absolute label
+#define A   0x0100 // register name (bank)
+#define B   0x0200 // bit name
+#define D   0x0400 // destination select
+#define F   0x0800 // "FSR0", e.g.
+#define R   0x1000 // register name (address)
+#define S   0x2000 // special
+#define T   0x4000 // "TRISA", e.g.
 
 
 struct buffer {
@@ -209,11 +211,11 @@ struct cmdinfo cmdinfo_init[] = {
     [C__NONE__] = { .str = NULL },
 
     [C_ADDWF] = { .str = "addwf", .opds = {R, D, 0} },
-    [C_MOVLW] = { .str = "movlw", .opds = {I, 0} },
+    [C_MOVLW] = { .str = "movlw", .opds = {U8, 0} },
 
     [C__LAST__] = { .str = NULL },
 
-    [D_SFR] = { .str = ".sfr", .opds = {N, E, 0} },
+    [D_SFR] = { .str = ".sfr", .opds = {U12, S, 0} },
 
     [D__LAST__] = { .str = NULL },
 };
@@ -255,11 +257,18 @@ dict_define(reginfo, reginfo_array);
 
 struct line {
     char* label;
+    struct line* prev;
+    struct line* next;
     int num;
+    bool star;
     struct cmdinfo* cmd;
     union {
         int32_t i;
         char* s;
+        struct {
+            int8_t b; // -1 means common
+            uint8_t a;
+        } r;
     } opds[OPDS_LEN];
 };
 
@@ -277,15 +286,44 @@ void print_line(struct line* line)
             break;
         if (o != 0)
             putchar(',');
-        if (line->cmd->opds[o] & (I | U ))
-            printf(" 0x%X", line->opds[o].i);
-        else if (line->cmd->opds[o] == D)
+        if (line->cmd->opds[o] & (U3 | U5 | U7 | U8 | A | R)) {
+            printf(" 0x%02X", line->opds[o].i);
+        } else if (line->cmd->opds[o] == I6) {
+            if (line->opds[o].i >= 0)
+                printf(" 0x%02X", line->opds[o].i);
+            else
+                printf(" -0x%02X", -line->opds[o].i);
+        } else if (line->cmd->opds[o] == U12) {
+            printf(" 0x%04X", line->opds[o].i);
+        } else if (line->cmd->opds[o] == B) {
+            printf(" %d", line->opds[o].i);
+        } else if (line->cmd->opds[o] == D) {
             printf(" %c", line->opds[o].i ? 'f' : 'w');
-        else if (line->cmd->opds[o] & (R | L))
+        } else if (line->cmd->opds[o] == F) {
+            printf(" FSR%d", line->opds[o].i);
+        } else if (line->cmd->opds[o] & (L9 | L11)) {
+            printf(" ???");
+        } else if (line->cmd->opds[o] == S) {
             printf(" %s", line->opds[o].s);
+        }
     }
 
     putchar('\n');
+}
+
+
+void insert_line(struct line* next, struct line* line)
+{
+    line->label = next->label;
+    line->prev = next->prev;
+    line->next = next;
+    line->num = next->num;
+
+    if (next->prev != NULL)
+        next->prev->next = line;
+
+    next->prev = line;
+    next->label = NULL;
 }
 
 
@@ -319,6 +357,8 @@ struct line parse_line(struct buffer* b, int l)
         if (tkn.num != ':')
             fatal(E_COMMON, "%d: Expected colon, operand, or newline", l);
         line.label = malloc(first.num + 1);
+        if (line.label == NULL)
+            fatal(E_RARE, "Can't allocate label");
         strcpy(line.label, first_text);
 
         cmd = next_token(b, l);
@@ -330,6 +370,9 @@ struct line parse_line(struct buffer* b, int l)
 
         b->buf[b->pos] = '\0';
 
+        line.star = (cmd.text[0] == '*');
+        if (line.star)
+            ++cmd.text;
         ci = dict_get(&cmdinfo, cmd.text);
         if (ci == NULL)
             fatal(E_COMMON, "%d: Invalid opcode or directive \"%s\"", l,
@@ -337,7 +380,11 @@ struct line parse_line(struct buffer* b, int l)
 
         tkn = next_token(b, l);
     } else {
-        ci = dict_get(&cmdinfo, first_text);
+        line.star = (first_text[0] == '*');
+        if (line.star)
+            ci = dict_get(&cmdinfo, first_text + 1);
+        else
+            ci = dict_get(&cmdinfo, first_text);
         if (ci == NULL)
             fatal(E_COMMON, "%d: Invalid opcode or directive \"%s\"", l,
                 first_text);
@@ -361,9 +408,30 @@ struct line parse_line(struct buffer* b, int l)
             tkn = next_token(b, l);
         }
 
-        if (line.cmd->opds[o] == I) {
+        if (line.cmd->opds[o] & (U3 | U5 | U7 | U8 | U12 | I6)) {
             if (tkn.type != T_NUM)
                 fatal(E_COMMON, "%d: Expected number", l);
+
+            int32_t min;
+            int32_t max;
+            switch (line.cmd->opds[o]) {
+                case U3:
+                    min = 0; max = 0x7; break;
+                case U5:
+                    min = 0; max = 0x1F; break;
+                case U7:
+                    min = 0; max = 0x7F; break;
+                case U8:
+                    min = 0; max = 0xFF; break;
+                case U12:
+                    min = 0; max = 0xFFF; break;
+                case I6:
+                    min = -0x20; max = 0x1F; break;
+                default:
+                    fatal(E_RARE, "Impossible state");
+            }
+            if ( !(min <= tkn.num && tkn.num <= max) )
+                fatal(E_COMMON, "%d: Number is out of range", l);
 
             line.opds[o].i = tkn.num;
         } else if (line.cmd->opds[o] == D) {
@@ -377,9 +445,26 @@ struct line parse_line(struct buffer* b, int l)
             else
                 fatal(E_COMMON, "%d: Expected destination select", l);
         } else if (line.cmd->opds[o] == R) {
-            if (tkn.type != T_TEXT)
+            if (tkn.type == T_TEXT) {
+                char c = tkn.text[tkn.num];
+                tkn.text[tkn.num] = '\0';
+                struct reginfo* ri = dict_get(&reginfo, tkn.text);
+                if (ri == NULL)
+                    fatal(E_COMMON, "%d: Unknown register \"%s\"", l,
+                        tkn.text);
+                tkn.text[tkn.num] = c;
+                line.opds[o].r.b = ri->bank;
+                line.opds[o].r.a = ri->addr;
+            } else if (tkn.type == T_NUM) {
+                line.opds[o].r.b = -1;
+                line.opds[o].r.a = tkn.num;
+            } else {
                 fatal(E_COMMON, "%d: Expected register name", l);
-
+            }
+        } else if (line.cmd->opds[o] == S) {
+            if (tkn.type != T_TEXT)
+                // (Clarify this error message.)
+                fatal(E_COMMON, "%d: Expected text (FIXME)", l);
             line.opds[o].s = malloc(tkn.num + 1);
             memcpy(line.opds[o].s, tkn.text, tkn.num);
             line.opds[o].s[tkn.num] = '\0';
@@ -394,6 +479,81 @@ struct line parse_line(struct buffer* b, int l)
         fatal(E_COMMON, "%d: Trailing characters", l);
 
     return line;
+}
+
+
+static
+struct line* assemble_file(struct buffer* b)
+{
+    struct line* start = NULL;
+    struct line* prev = NULL;
+
+    int l = 1;
+    int bsr = -1;
+    char* label = NULL;
+    while (true) {
+        struct line* line = malloc(sizeof(struct line));
+        if (line == NULL)
+            fatal(E_RARE, "Can't allocate line");
+        *line = parse_line(b, l);
+        if (line->num == -1) {
+            break;
+        } else if (line->cmd == NULL) {
+            if (line->label != NULL)
+                label = line->label;
+        } else {
+            if (line->label == NULL)
+                line->label = label;
+            label = NULL;
+
+            if (start == NULL) {
+                start = line;
+            } else {
+                line->prev = prev;
+                prev->next = line;
+            }
+
+            if (line->label)
+                bsr = -1;
+
+            if (line->cmd - cmdinfo_init > C__LAST__) {
+                if (line->cmd - cmdinfo_init == D_SFR) {
+                    struct reginfo* ri = dict_avail(&reginfo, line->opds[1].s);
+                    ri->name = line->opds[1].s;
+                    ri->bank = line->opds[0].i >> 7;
+                    ri->addr = line->opds[0].i & ((2 << 7) - 1);
+                }
+            } else {
+                if (line->cmd->opds[0] == R) {
+                    if (line->opds[0].r.b == -1) {
+                        line->opds[0].i = line->opds[0].r.a;
+                    } else if (line->star) {
+                        if (bsr != -1 && line->opds[0].r.b != bsr)
+                            fatal(E_COMMON,
+                                "Star prevents changing to bank %d",
+                                line->opds[0].r.b);
+                        line->opds[0].i = line->opds[0].r.a;
+                    } else {
+                        if (line->opds[0].r.b != bsr) {
+                            struct line* new = malloc(sizeof(struct line));
+                            if (new == NULL)
+                                fatal(E_RARE, "Can't allocate line");
+                            new->star = false;
+                            new->cmd = cmdinfo_init + C_MOVLW;
+                            new->opds[0].i = line->opds[0].r.b;
+                            insert_line(line, new);
+                        }
+                    }
+                }
+            }
+
+            print_line(line);
+        }
+        ++l;
+        prev = line;
+    }
+
+    return start;
 }
 
 
@@ -427,21 +587,5 @@ void assemble_emr(const int src)
         return;
     }
 
-    int l = 1;
-    char* label = NULL;
-    while (true) {
-        struct line line = parse_line(&b, l);
-        if (line.num == -1) {
-            break;
-        } else if (line.cmd == NULL) {
-            if (line.label != NULL)
-                label = line.label;
-        } else {
-            if (line.label == NULL)
-                line.label = label;
-            label = NULL;
-            print_line(&line);
-        }
-        ++l;
-    }
+    assemble_file(&b);
 }
