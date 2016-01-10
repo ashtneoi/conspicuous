@@ -15,19 +15,24 @@
 
 #define OPDS_LEN 3
 
-#define U3  0x0001
-#define U5  0x0002
-#define U7  0x0004
-#define U8  0x0008
-#define U12 0x0010
-#define I6  0x0020
+#define U   0x0010
+#define U3  0x0013
+#define U5  0x0015
+#define U7  0x0017
+#define U8  0x0018
+#define U12 0x001C
+#define I   0x0020
+#define I6  0x0026
 #define L9  0x0040 // 9-bit signed relative label
 #define L11 0x0080 // 11-bit unsigned absolute label
-#define A   0x0100 // register name (bank)
-#define B   0x0200 // bit name
+#define A   0x0100
+#define A5  0x0105 // register name (bank)
+#define B   0x0200
+#define B3  0x0203 // bit name
 #define D   0x0400 // destination select
 #define F   0x0800 // "FSR0", e.g.
-#define R   0x1000 // register name (address)
+#define R   0x1000
+#define R7  0x1007 // register name (address)
 #define S   0x2000 // special
 #define T   0x4000 // "TRISA", e.g.
 
@@ -188,7 +193,7 @@ struct token next_token(struct buffer* const b, int l)
 
 struct cmdinfo {
     const char* str;
-    uint16_t opds[OPDS_LEN];
+    struct cmdinfo_shape* shape;
     uint8_t wids[OPDS_LEN];
 };
 
@@ -207,15 +212,36 @@ enum cmd {
 };
 
 
+enum {
+    SH_R7 = 0,
+    SH_R7D,
+    SH_U8,
+    SH_U12S,
+};
+
+
+// All shapes must end in 0; chained shapes must be in nondecreasing order by
+// length.
+struct cmdinfo_shape {
+    uint16_t opds[OPDS_LEN];
+    struct cmdinfo_shape* next;
+} shapes[] = {
+    [SH_R7] = { .opds = {R7, 0}, .next = shapes + SH_R7D },
+    [SH_R7D] = { .opds = {R7, D, 0}, .next = NULL },
+    [SH_U8] = { .opds = {U8, 0}, .next = NULL },
+    [SH_U12S] = { .opds = {U12, S, 0}, .next = NULL },
+};
+
+
 struct cmdinfo cmdinfo_init[] = {
     [C__NONE__] = { .str = NULL },
 
-    [C_ADDWF] = { .str = "addwf", .opds = {R, D, 0} },
-    [C_MOVLW] = { .str = "movlw", .opds = {U8, 0} },
+    [C_ADDWF] = { .str = "addwf", .shape = shapes + SH_R7 },
+    [C_MOVLW] = { .str = "movlw", .shape = shapes + SH_U8 },
 
     [C__LAST__] = { .str = NULL },
 
-    [D_SFR] = { .str = ".sfr", .opds = {U12, S, 0} },
+    [D_SFR] = { .str = ".sfr", .shape = shapes + SH_U12S },
 
     [D__LAST__] = { .str = NULL },
 };
@@ -262,6 +288,7 @@ struct line {
     int num;
     bool star;
     struct cmdinfo* cmd;
+    struct cmdinfo_shape* shape;
     union {
         int32_t i;
         char* s;
@@ -282,28 +309,34 @@ void print_line(struct line* line)
     printf("%s", line->cmd->str);
 
     for (int o = 0; o < OPDS_LEN; ++o) {
-        if (line->cmd->opds[o] == 0)
+        uint16_t* opds = line->shape->opds;
+
+        if (opds[o] == 0)
             break;
         if (o != 0)
             putchar(',');
-        if (line->cmd->opds[o] & (U3 | U5 | U7 | U8 | A | R)) {
-            printf(" 0x%02X", line->opds[o].i);
-        } else if (line->cmd->opds[o] == I6) {
+        if (opds[o] & (U | A | R)) {
+            int bits = opds[o] & 0xF;
+            if (bits <= 5)
+                printf(" %d", line->opds[o].i);
+            else if (bits <= 8)
+                printf(" 0x%02X", line->opds[o].i);
+            else
+                printf(" 0x%04X", line->opds[o].i);
+        } else if (opds[o] & I) {
             if (line->opds[o].i >= 0)
                 printf(" 0x%02X", line->opds[o].i);
             else
                 printf(" -0x%02X", -line->opds[o].i);
-        } else if (line->cmd->opds[o] == U12) {
-            printf(" 0x%04X", line->opds[o].i);
-        } else if (line->cmd->opds[o] == B) {
+        } else if (opds[o] == B) {
             printf(" %d", line->opds[o].i);
-        } else if (line->cmd->opds[o] == D) {
+        } else if (opds[o] == D) {
             printf(" %c", line->opds[o].i ? 'f' : 'w');
-        } else if (line->cmd->opds[o] == F) {
+        } else if (opds[o] == F) {
             printf(" FSR%d", line->opds[o].i);
-        } else if (line->cmd->opds[o] & (L9 | L11)) {
+        } else if (opds[o] & (L9 | L11)) {
             printf(" ???");
-        } else if (line->cmd->opds[o] == S) {
+        } else if (opds[o] == S) {
             printf(" %s", line->opds[o].s);
         }
     }
@@ -391,86 +424,95 @@ struct line parse_line(struct buffer* b, int l)
     }
     line.cmd = ci->cmd;
 
-    for (int o = 0; o < OPDS_LEN && line.cmd->opds[o] != 0; ++o) {
-        if (tkn.type == T_EOL) {
-            if (line.cmd->opds[o] == D && line.cmd->opds[o + 1] == 0) {
-                line.opds[o].i = 1;
-                break;
-            } else {
-                fatal(E_COMMON, "%d: Unexpected newline", l);
-            }
-        }
-
+    /*struct cmdinfo_shape* shape = line.cmd->shape;*/
+    line.shape = line.cmd->shape;
+    for (int o = 0; /**/; ++o) {
+        // Handle separator. //
         if (o > 0) {
-            if ( !(tkn.type == T_CHAR && tkn.num == ',') )
-                fatal(E_COMMON, "%d: Expected comma", l);
-
-            tkn = next_token(b, l);
+            if (tkn.type == T_CHAR && tkn.num == ',')
+                tkn = next_token(b, l);
+            else if (tkn.type != T_EOL)
+                fatal(E_COMMON, "%d: Expected comma or EOL", l);
         }
 
-        if (line.cmd->opds[o] & (U3 | U5 | U7 | U8 | U12 | I6)) {
-            if (tkn.type != T_NUM)
-                fatal(E_COMMON, "%d: Expected number", l);
+        for (/**/; tkn.type != T_EOL && line.shape != NULL;
+                line.shape = line.shape->next) {
+            uint16_t* opds = line.shape->opds;
 
-            int32_t min;
-            int32_t max;
-            switch (line.cmd->opds[o]) {
-                case U3:
-                    min = 0; max = 0x7; break;
-                case U5:
-                    min = 0; max = 0x1F; break;
-                case U7:
-                    min = 0; max = 0x7F; break;
-                case U8:
-                    min = 0; max = 0xFF; break;
-                case U12:
-                    min = 0; max = 0xFFF; break;
-                case I6:
-                    min = -0x20; max = 0x1F; break;
-                default:
-                    fatal(E_RARE, "Impossible state");
-            }
-            if ( !(min <= tkn.num && tkn.num <= max) )
-                fatal(E_COMMON, "%d: Number is out of range", l);
+            if (line.shape->opds[o] == 0)
+                continue;
 
-            line.opds[o].i = tkn.num;
-        } else if (line.cmd->opds[o] == D) {
-            if ( !(tkn.type == T_TEXT && tkn.num == 1) )
-                fatal(E_COMMON, "%d: Expected destination select", l);
+            if (opds[o] & (U | I)) {
+                if (tkn.type != T_NUM)
+                    fatal(E_COMMON, "%d: Expected number", l);
 
-            if (tkn.text[0] == 'w' || tkn.text[0] == 'W')
-                line.opds[o].i = 0;
-            else if (tkn.text[0] == 'f' || tkn.text[0] == 'F')
-                line.opds[o].i = 1;
-            else
-                fatal(E_COMMON, "%d: Expected destination select", l);
-        } else if (line.cmd->opds[o] == R) {
-            if (tkn.type == T_TEXT) {
-                char c = tkn.text[tkn.num];
-                tkn.text[tkn.num] = '\0';
-                struct reginfo* ri = dict_get(&reginfo, tkn.text);
-                if (ri == NULL)
-                    fatal(E_COMMON, "%d: Unknown register \"%s\"", l,
-                        tkn.text);
-                tkn.text[tkn.num] = c;
-                line.opds[o].r.b = ri->bank;
-                line.opds[o].r.a = ri->addr;
-            } else if (tkn.type == T_NUM) {
-                line.opds[o].r.b = -1;
-                line.opds[o].r.a = tkn.num;
+                int32_t min;
+                int32_t max;
+                switch (opds[o]) {
+                    case U3:
+                        min = 0; max = 0x7; break;
+                    case U5:
+                        min = 0; max = 0x1F; break;
+                    case U7:
+                        min = 0; max = 0x7F; break;
+                    case U8:
+                        min = 0; max = 0xFF; break;
+                    case U12:
+                        min = 0; max = 0xFFF; break;
+                    case I6:
+                        min = -0x20; max = 0x1F; break;
+                    default:
+                        fatal(E_RARE, "Impossible state");
+                }
+                if ( !(min <= tkn.num && tkn.num <= max) )
+                    continue;
+
+                line.opds[o].i = tkn.num;
+            } else if (opds[o] & D) {
+                if ( !(tkn.type == T_TEXT && tkn.num == 1) )
+                    continue;
+
+                if (tkn.text[0] == 'w' || tkn.text[0] == 'W')
+                    line.opds[o].i = 0;
+                else if (tkn.text[0] == 'f' || tkn.text[0] == 'F')
+                    line.opds[o].i = 1;
+                else
+                    fatal(E_COMMON, "%d: Expected destination select", l);
+            } else if (opds[o] & R) {
+                if (tkn.type == T_TEXT) {
+                    char c = tkn.text[tkn.num];
+                    tkn.text[tkn.num] = '\0';
+                    struct reginfo* ri = dict_get(&reginfo, tkn.text);
+                    if (ri == NULL)
+                        fatal(E_COMMON, "%d: Invalid register \"%s\"", l,
+                            tkn.text);
+                    tkn.text[tkn.num] = c;
+                    line.opds[o].r.b = ri->bank;
+                    line.opds[o].r.a = ri->addr;
+                } else if (tkn.type == T_NUM) {
+                    line.opds[o].r.b = -1;
+                    line.opds[o].r.a = tkn.num;
+                } else {
+                    continue;
+                }
+            } else if (opds[o] & S) {
+                if (tkn.type != T_TEXT)
+                    continue;
+                line.opds[o].s = malloc(tkn.num + 1);
+                memcpy(line.opds[o].s, tkn.text, tkn.num);
+                line.opds[o].s[tkn.num] = '\0';
             } else {
-                fatal(E_COMMON, "%d: Expected register name", l);
+                fatal(E_RARE, "%d: Unimplemented operand type", l);
             }
-        } else if (line.cmd->opds[o] == S) {
-            if (tkn.type != T_TEXT)
-                // (Clarify this error message.)
-                fatal(E_COMMON, "%d: Expected text (FIXME)", l);
-            line.opds[o].s = malloc(tkn.num + 1);
-            memcpy(line.opds[o].s, tkn.text, tkn.num);
-            line.opds[o].s[tkn.num] = '\0';
-        } else {
-            fatal(E_RARE, "%d: Unimplemented operand type", l);
+
+            break; // I'm so sorry.
         }
+
+        if (line.shape == NULL)
+            fatal(E_COMMON, "%d: Operand %d is invalid", l, o + 1);
+
+        if (tkn.type == T_EOL)
+            break;
 
         tkn = next_token(b, l);
     }
@@ -516,15 +558,15 @@ struct line* assemble_file(struct buffer* b)
             if (line->label)
                 bsr = -1;
 
-            if (line->cmd - cmdinfo_init > C__LAST__) {
-                if (line->cmd - cmdinfo_init == D_SFR) {
+            if (line->cmd > cmdinfo_init + C__LAST__) {
+                if (line->cmd == cmdinfo_init + D_SFR) {
                     struct reginfo* ri = dict_avail(&reginfo, line->opds[1].s);
                     ri->name = line->opds[1].s;
                     ri->bank = line->opds[0].i >> 7;
                     ri->addr = line->opds[0].i & ((2 << 7) - 1);
                 }
             } else {
-                if (line->cmd->opds[0] == R) {
+                if (line->cmd->shape->opds[0] & R) {
                     if (line->opds[0].r.b == -1) {
                         line->opds[0].i = line->opds[0].r.a;
                     } else if (line->star) {
