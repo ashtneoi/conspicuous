@@ -426,7 +426,8 @@ struct line parse_line(struct buffer* b, int l)
 
     /*struct cmdinfo_shape* shape = line.cmd->shape;*/
     line.shape = line.cmd->shape;
-    for (int o = 0; /**/; ++o) {
+    int o;
+    for (o = 0; /**/; ++o) {
         // Handle separator. //
         if (o > 0) {
             if (tkn.type == T_CHAR && tkn.num == ',')
@@ -516,6 +517,9 @@ struct line parse_line(struct buffer* b, int l)
 
         tkn = next_token(b, l);
     }
+
+    if (line.shape->opds[o] != 0)
+        fatal(E_COMMON, "%d: Too few operands", l);
 
     if (tkn.type != T_EOL)
         fatal(E_COMMON, "%d: Trailing characters", l);
