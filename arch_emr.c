@@ -221,12 +221,12 @@ enum {
     SH_R7B3,
 };
 
-
-// All shapes must end in 0; chained shapes must be in nondecreasing order by
-// length.
+// Shape rules:
+//   - all operand lists must end in 0
+//   - chained shapes must be in nondecreasing order by operand list length
 struct cmdinfo_shape {
-    uint16_t opds[OPDS_LEN];
     struct cmdinfo_shape* next;
+    uint16_t opds[OPDS_LEN];
 } shapes[] = {
     [SH_R7] = { .opds = {R7, 0}, .next = shapes + SH_R7D },
     [SH_R7D] = { .opds = {R7, D, 0}, .next = NULL },
@@ -469,7 +469,7 @@ struct line parse_line(struct buffer* b, int l)
                     case I6:
                         min = -0x20; max = 0x1F; break;
                     default:
-                        fatal(E_RARE, "Impossible state");
+                        fatal(E_RARE, "BUG");
                 }
                 if ( !(min <= tkn.num && tkn.num <= max) )
                     continue;
