@@ -609,7 +609,8 @@ struct line* assemble_file(struct buffer* b)
             }
         }
         ++l;
-        prev = line;
+        if (line->cmd != NULL)
+            prev = line;
     }
 
     for (struct line* line = start; line != NULL; line = line->next)
