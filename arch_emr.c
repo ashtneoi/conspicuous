@@ -217,6 +217,8 @@ enum {
     SH_R7D,
     SH_U8,
     SH_U12S,
+    SH_B3,
+    SH_R7B3,
 };
 
 
@@ -228,8 +230,12 @@ struct cmdinfo_shape {
 } shapes[] = {
     [SH_R7] = { .opds = {R7, 0}, .next = shapes + SH_R7D },
     [SH_R7D] = { .opds = {R7, D, 0}, .next = NULL },
+
     [SH_U8] = { .opds = {U8, 0}, .next = NULL },
     [SH_U12S] = { .opds = {U12, S, 0}, .next = NULL },
+
+    [SH_B3] = {.opds = {B3, 0}, .next = shapes + SH_R7B3 },
+    [SH_R7B3] = { .opds = {R7, B3, 0}, .next = NULL },
 };
 
 
