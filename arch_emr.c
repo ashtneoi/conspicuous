@@ -202,6 +202,7 @@ enum cmd {
     C__NONE__ = 0,
 
     C_ADDWF,
+    C_MOVLB,
     C_MOVLW,
 
     C__LAST__,
@@ -215,8 +216,12 @@ enum cmd {
 enum {
     SH_R7 = 0,
     SH_R7D,
+
+    SH_U7,
+
     SH_U8,
     SH_U12S,
+
     SH_B3,
     SH_R7B3,
 };
@@ -231,6 +236,8 @@ struct cmdinfo_shape {
     [SH_R7] = { .opds = {R7, 0}, .next = shapes + SH_R7D },
     [SH_R7D] = { .opds = {R7, D, 0}, .next = NULL },
 
+    [SH_U7] = { .opds = {U7, 0}, .next = NULL },
+
     [SH_U8] = { .opds = {U8, 0}, .next = NULL },
     [SH_U12S] = { .opds = {U12, S, 0}, .next = NULL },
 
@@ -243,6 +250,7 @@ struct cmdinfo cmdinfo_init[] = {
     [C__NONE__] = { .str = NULL },
 
     [C_ADDWF] = { .str = "addwf", .shape = shapes + SH_R7 },
+    [C_MOVLB] = { .str = "movlb", .shape = shapes + SH_U7 },
     [C_MOVLW] = { .str = "movlw", .shape = shapes + SH_U8 },
 
     [C__LAST__] = { .str = NULL },
@@ -591,19 +599,21 @@ struct line* assemble_file(struct buffer* b)
                             if (new == NULL)
                                 fatal(E_RARE, "Can't allocate line");
                             new->star = false;
-                            new->cmd = cmdinfo_init + C_MOVLW;
+                            new->cmd = cmdinfo_init + C_MOVLB;
+                            new->shape = shapes + SH_U7;
                             new->opds[0].i = line->opds[0].r.b;
                             insert_line(line, new);
                         }
                     }
                 }
             }
-
-            print_line(line);
         }
         ++l;
         prev = line;
     }
+
+    for (struct line* line = start; line != NULL; line = line->next)
+        print_line(line);
 
     return start;
 }
