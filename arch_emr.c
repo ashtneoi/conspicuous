@@ -20,21 +20,30 @@
 #define U5  0x0015
 #define U7  0x0017
 #define U8  0x0018
+#define U11 0x001B
 #define U12 0x001C
+
 #define I   0x0020
 #define I6  0x0026
-#define L9  0x0040 // 9-bit signed relative label
-#define L11 0x0080 // 11-bit unsigned absolute label
-#define A   0x0100
-#define A5  0x0105 // register name (bank)
-#define B   0x0200
-#define B3  0x0203 // bit name
-#define D   0x0400 // destination select
-#define F   0x0800 // "FSR0", e.g.
-#define R   0x1000
-#define R7  0x1007 // register name (address)
-#define S   0x2000 // special
-#define T   0x4000 // "TRISA", e.g.
+#define I9  0x0029
+
+#define L   0x0040
+#define LH  0x0047 // absolute label (upper, U7)
+#define LR  0x0049 // relative label (I9)
+#define LA  0x004B // absolute label (lower, U11)
+
+#define R   0x0080
+#define RB  0x0083 // bit name or number (U3)
+#define RA  0x0085 // register name (bank, U5)
+#define RR  0x0087 // register name (address, U7)
+
+#define FF  0x0101 // file select register name
+#define FM  0x0203 // file select register name and modifier
+#define FI  0x0407 // file select register name and index (I6)
+
+#define D   0x0801 // destination select
+#define S   0x1000 // special
+#define T   0x2003 // TRIS register name (U7)
 
 
 struct buffer {
@@ -202,8 +211,62 @@ enum cmd {
     C__NONE__ = 0,
 
     C_ADDWF,
+    C_ADDWFC,
+    C_ANDWF,
+    C_LSLF,
+    C_LSRF,
+    C_CLRF,
+    C_CLRW,
+    C_COMF,
+    C_DECF,
+    C_INCF,
+    C_IORWF,
+    C_MOVF,
+    C_MOVWF,
+    C_RLF,
+    C_RRF,
+    C_SUBWF,
+    C_SUBWFB,
+    C_SWAPF,
+    C_XORWF,
+
+    C_DECFSZ,
+    C_INCFSZ,
+
+    C_BCF,
+    C_BSF,
+
+    C_BTFSC,
+    C_BTFSS,
+
+    C_ADDLW,
+    C_ANDLW,
+    C_IORLW,
     C_MOVLB,
+    C_MOVLP,
     C_MOVLW,
+    C_SUBLW,
+    C_XORLW,
+
+    C_BRA,
+    C_BRW,
+    C_CALL,
+    C_CALLW,
+    C_GOTO,
+    C_RETFIE,
+    C_RETLW,
+    C_RETURN,
+
+    C_CLRWDT,
+    C_NOP,
+    C_OPTION,
+    C_RESET,
+    C_SLEEP,
+    C_TRIS,
+
+    C_ADDFSR,
+    C_MOVIW,
+    C_MOVWI,
 
     C__LAST__,
 
@@ -214,46 +277,89 @@ enum cmd {
 
 
 enum {
-    SH_R7 = 0,
-    SH_R7D,
-
-    SH_U7,
-
+    SH_RR_D = 0,
+    SH_RR_D_2,
+    SH_RR,
+    SH_NONE,
+    SH_RR_RB,
+    SH_RR_RB_2,
     SH_U8,
+    SH_RA,
+    SH_LH,
+    SH_LR,
+    SH_LA,
+    SH_T,
+    SH_FF_I6,
+    SH_INDIR,
+    SH_INDIR_2,
+    SH_U7,
     SH_U12S,
-
-    SH_B3,
-    SH_R7B3,
 };
 
 // Shape rules:
 //   - all operand lists must end in 0
 //   - chained shapes must be in nondecreasing order by operand list length
+//   - if two nonfinal operands are in the same slot of two chained shapes,
+//     they must be compatible
 struct cmdinfo_shape {
-    struct cmdinfo_shape* next;
+    bool next;
     uint16_t opds[OPDS_LEN];
 } shapes[] = {
-    [SH_R7] = { .opds = {R7, 0}, .next = shapes + SH_R7D },
-    [SH_R7D] = { .opds = {R7, D, 0}, .next = NULL },
+    [SH_RR_D] = { .opds = {RR, 0}, .next = true },
+    [SH_RR_D_2] = { .opds = {RR, D, 0}, .next = false },
 
-    [SH_U7] = { .opds = {U7, 0}, .next = NULL },
+    [SH_RR] = { .opds = {RR, 0}, .next = false },
 
-    [SH_U8] = { .opds = {U8, 0}, .next = NULL },
-    [SH_U12S] = { .opds = {U12, S, 0}, .next = NULL },
+    [SH_NONE] = { .opds = {0}, .next = false },
 
-    [SH_B3] = {.opds = {B3, 0}, .next = shapes + SH_R7B3 },
-    [SH_R7B3] = { .opds = {R7, B3, 0}, .next = NULL },
+    [SH_RR_RB] = {.opds = {RB, 0}, .next = true },
+    [SH_RR_RB_2] = { .opds = {RR, RB, 0}, .next = false },
+
+    [SH_U8] = { .opds = {U8, 0}, .next = false },
+
+    [SH_RA] = { .opds = {RA, 0}, .next = false },
+
+    [SH_LH] = { .opds = {LH, 0}, .next = false },
+
+    [SH_LR] = { .opds = {LR, 0}, .next = false },
+
+    [SH_LA] = { .opds = {LA, 0}, .next = false },
+
+    [SH_T] = { .opds = {T, 0}, .next = false },
+
+    [SH_FF_I6] = { .opds = {FF, I6, 0}, .next = false },
+
+    [SH_INDIR] = { .opds = {FM, 0}, .next = true },
+    [SH_INDIR_2] = { .opds = {FI, 0}, .next = false },
+
+    [SH_U7] = { .opds = {U7, 0}, .next = false },
+
+    [SH_U12S] = { .opds = {U12, S, 0}, .next = false },
 };
 
 
 struct cmdinfo cmdinfo_init[] = {
     [C__NONE__] = { .str = NULL },
 
-    [C_ADDWF] = { .str = "addwf", .shape = shapes + SH_R7 },
-    [C_MOVLB] = { .str = "movlb", .shape = shapes + SH_U7 },
-    [C_MOVLW] = { .str = "movlw", .shape = shapes + SH_U8 },
+    [C_ADDWF] = { .str = "addwf", .shape = shapes + SH_RR_D },
+    [C_CLRF] = { .str = "clrf", .shape = shapes + SH_RR },
+    [C_CLRW] = { .str = "clrw", .shape = shapes + SH_NONE },
 
-    [C__LAST__] = { .str = NULL },
+    [C_BCF] = { .str = "bcf", .shape = shapes + SH_RR_RB },
+
+    [C_ADDLW] = { .str = "addlw", .shape = shapes + SH_U8 },
+    [C_MOVLB] = { .str = "movlb", .shape = shapes + SH_RA },
+    [C_MOVLP] = { .str = "movlp", .shape = shapes + SH_LH },
+
+    [C_BRA] = { .str = "bra", .shape = shapes + SH_LR },
+    [C_CALL] = { .str = "call", .shape = shapes + SH_LA },
+
+    [C_TRIS] = { .str = "tris", .shape = shapes + SH_T },
+
+    [C_ADDFSR] = { .str = "addfsr", .shape = shapes + SH_FF_I6 },
+    [C_MOVIW] = { .str = "moviw", .shape = shapes + SH_INDIR },
+
+    [C__LAST__] = { .str = NULL, .shape = NULL },
 
     [D_SFR] = { .str = ".sfr", .shape = shapes + SH_U12S },
 
@@ -272,23 +378,24 @@ dict_define(cmdinfo, cmdinfo_array);
 
 struct reginfo {
     const char* name;
-    int bank;
-    int addr;
+    int8_t bank;
+    uint8_t addr;
+    int8_t bit;
 } reginfo_array[256];
 
 struct reginfo reginfo_init[] = {
-    { .name = "INDF0", .bank = -1, .addr = 0x00 },
-    { .name = "INDF1", .bank = -1, .addr = 0x01 },
-    { .name = "PCL", .bank = -1, .addr = 0x02 },
-    { .name = "STATUS", .bank = -1, .addr = 0x03 },
-    { .name = "FSR0L", .bank = -1, .addr = 0x04 },
-    { .name = "FSR0H", .bank = -1, .addr = 0x05 },
-    { .name = "FSR1L", .bank = -1, .addr = 0x06 },
-    { .name = "FSR1H", .bank = -1, .addr = 0x07 },
-    { .name = "BSR", .bank = -1, .addr = 0x08 },
-    { .name = "WREG", .bank = -1, .addr = 0x09 },
-    { .name = "PCLATH", .bank = -1, .addr = 0x0A },
-    { .name = "INTCON", .bank = -1, .addr = 0x0B },
+    { .name = "INDF0", .bank = -1, .addr = 0x00, .bit = -1 },
+    { .name = "INDF1", .bank = -1, .addr = 0x01, .bit = -1 },
+    { .name = "PCL", .bank = -1, .addr = 0x02, .bit = -1 },
+    { .name = "STATUS", .bank = -1, .addr = 0x03, .bit = -1 },
+    { .name = "FSR0L", .bank = -1, .addr = 0x04, .bit = -1 },
+    { .name = "FSR0H", .bank = -1, .addr = 0x05, .bit = -1 },
+    { .name = "FSR1L", .bank = -1, .addr = 0x06, .bit = -1 },
+    { .name = "FSR1H", .bank = -1, .addr = 0x07, .bit = -1 },
+    { .name = "BSR", .bank = -1, .addr = 0x08, .bit = -1 },
+    { .name = "WREG", .bank = -1, .addr = 0x09, .bit = -1 },
+    { .name = "PCLATH", .bank = -1, .addr = 0x0A, .bit = -1 },
+    { .name = "INTCON", .bank = -1, .addr = 0x0B, .bit = -1 },
 };
 
 
@@ -307,8 +414,9 @@ struct line {
         int32_t i;
         char* s;
         struct {
-            int8_t b; // -1 means common
-            uint8_t a;
+            int8_t a; // bank (-1 means common)
+            uint8_t r; // address
+            int8_t b; // bit (-1 means none)
         } r;
     } opds[OPDS_LEN];
 };
@@ -329,7 +437,7 @@ void print_line(struct line* line)
             break;
         if (o != 0)
             putchar(',');
-        if (opds[o] & (U | A | R)) {
+        if (opds[o] & U) {
             int bits = opds[o] & 0xF;
             if (bits <= 5)
                 printf(" %d", line->opds[o].i);
@@ -339,11 +447,9 @@ void print_line(struct line* line)
                 printf(" 0x%04X", line->opds[o].i);
         } else if (opds[o] & I) {
             if (line->opds[o].i >= 0)
-                printf(" 0x%02X", line->opds[o].i);
+                printf(" 0x%03X", line->opds[o].i);
             else
-                printf(" -0x%02X", -line->opds[o].i);
-        } else if (opds[o] == B) {
-            printf(" %d", line->opds[o].i);
+                printf(" -0x%03X", -line->opds[o].i);
         } else if (opds[o] == D) {
             printf(" %c", line->opds[o].i ? 'f' : 'w');
         } else if (opds[o] == F) {
