@@ -46,6 +46,38 @@
 #define T   0x2003 // TRIS register name (U7)
 
 
+void print_type(int t)
+{
+    switch (t) {
+    case U: print("U"); break;
+    case U3: print("U3"); break;
+    case U5: print("U5"); break;
+    case U7: print("U7"); break;
+    case U8: print("U8"); break;
+    case U11: print("U11"); break;
+    case U12: print("U12"); break;
+    case I: print("I"); break;
+    case I6: print("I6"); break;
+    case I9: print("I9"); break;
+    case L: print("L"); break;
+    case LH: print("LH"); break;
+    case LR: print("LR"); break;
+    case LA: print("LA"); break;
+    case R: print("R"); break;
+    case RB: print("RB"); break;
+    case RA: print("RA"); break;
+    case RR: print("RR"); break;
+    case FF: print("FF"); break;
+    case FM: print("FM"); break;
+    case FI: print("FI"); break;
+    case D: print("D"); break;
+    case S: print("S"); break;
+    case T: print("T"); break;
+    default: print("???"); break;
+    }
+}
+
+
 struct buffer {
     char buf[CHUNK_LEN * 2 + 1];
     const int src;
@@ -89,12 +121,33 @@ struct token {
 };
 
 
+void print_token(const struct token* const tkn)
+{
+    switch (tkn->type) {
+    case T_CHAR: printf("T_CHAR %c\n", tkn->num); break;
+    case T_TEXT: {
+        char orig = tkn->text[tkn->num];
+        tkn->text[tkn->num] = '\0';
+        printf("T_TEXT \"%s\"\n", tkn->text);
+        tkn->text[tkn->num] = orig;
+        break;
+    }
+    case T_NUM: printf("T_NUM %d\n", tkn->num); break;
+    case T_EOL: print("T_EOL\n"); break;
+    case T_EOF: print("T_EOF\n"); break;
+    default: fatal(E_RARE, "BUG");
+    }
+}
+
+
 static
 struct token next_token(struct buffer* const b, int l)
 {
+    // If EOF, return T_EOF.
     if (b->pos == b->end && fill_buffer(b) == 0)
         return (struct token){ .type = T_EOF };
 
+    // Skip whitespace. If EOF, return T_EOF.
     while (b->buf[b->pos] == ' ' || b->buf[b->pos] == '\t'
             || b->buf[b->pos] == '\0') {
         b->tok = ++b->pos;
@@ -103,10 +156,12 @@ struct token next_token(struct buffer* const b, int l)
     }
 
     if (b->buf[b->pos] == ',' || b->buf[b->pos] == ':') {
+        // If char, return T_CHAR.
         struct token tkn = { .type = T_CHAR, .num = b->buf[b->pos] };
         b->tok = ++b->pos;
         return tkn;
     } else if (b->buf[b->pos] == ';' || b->buf[b->pos] == '\n') {
+        // If ';' or EOL, ignore until EOL and return T_EOL.
         while (b->buf[b->pos] != '\n') {
             b->tok = ++b->pos;
             if (b->pos == b->end && fill_buffer(b) == 0)
@@ -116,6 +171,7 @@ struct token next_token(struct buffer* const b, int l)
         return (struct token){ .type = T_EOL };
     }
 
+    // Consume text.
     while (strchr(" \t,:;\n", b->buf[b->pos]) == NULL) {
         ++b->pos;
         if (b->pos == b->end && fill_buffer(b) == 0)
@@ -409,7 +465,7 @@ struct line {
     int num;
     bool star;
     struct cmdinfo* cmd;
-    struct cmdinfo_shape* shape;
+    uint16_t types[OPDS_LEN];
     union {
         int32_t i;
         char* s;
@@ -431,7 +487,7 @@ void print_line(struct line* line)
     printf("%s", line->cmd->str);
 
     for (int o = 0; o < OPDS_LEN; ++o) {
-        uint16_t* opds = line->shape->opds;
+        uint16_t* opds = line->types;
 
         if (opds[o] == 0)
             break;
@@ -452,12 +508,12 @@ void print_line(struct line* line)
                 printf(" -0x%03X", -line->opds[o].i);
         } else if (opds[o] == D) {
             printf(" %c", line->opds[o].i ? 'f' : 'w');
-        } else if (opds[o] == F) {
+        } else if (opds[o] == FF) {
             printf(" FSR%d", line->opds[o].i);
-        } else if (opds[o] & (L9 | L11)) {
-            printf(" ???");
         } else if (opds[o] == S) {
             printf(" %s", line->opds[o].s);
+        } else {
+            print(" ???");
         }
     }
 
@@ -544,8 +600,7 @@ struct line parse_line(struct buffer* b, int l)
     }
     line.cmd = ci->cmd;
 
-    /*struct cmdinfo_shape* shape = line.cmd->shape;*/
-    line.shape = line.cmd->shape;
+    struct cmdinfo_shape* shape = line.cmd->shape;
     int o;
     for (o = 0; /**/; ++o) {
         // Handle separator. //
@@ -556,11 +611,23 @@ struct line parse_line(struct buffer* b, int l)
                 fatal(E_COMMON, "%d: Expected comma or EOL", l);
         }
 
-        for (/**/; tkn.type != T_EOL && line.shape != NULL;
-                line.shape = line.shape->next) {
-            uint16_t* opds = line.shape->opds;
+        if (verbosity >= 2)
+            print_token(&tkn);
 
-            if (line.shape->opds[o] == 0)
+        for (/**/; tkn.type != T_EOL && shape != NULL;
+                shape = shape->next ? shape + 1 : NULL) {
+            if (verbosity >= 2) {
+                print("shape: ");
+                for (unsigned int i = 0; shape->opds[i] != 0; ++i) {
+                    if (i != 0)
+                        print(", ");
+                    print_type(shape->opds[i]);
+                }
+                putchar('\n');
+            }
+            uint16_t* opds = shape->opds;
+
+            if (shape->opds[o] == 0)
                 continue;
 
             if (opds[o] & (U | I)) {
@@ -589,7 +656,7 @@ struct line parse_line(struct buffer* b, int l)
                     continue;
 
                 line.opds[o].i = tkn.num;
-            } else if (opds[o] & D) {
+            } else if (opds[o] == D) {
                 if ( !(tkn.type == T_TEXT && tkn.num == 1) )
                     continue;
 
@@ -603,6 +670,7 @@ struct line parse_line(struct buffer* b, int l)
                 if (tkn.type == T_TEXT) {
                     char c = tkn.text[tkn.num];
                     tkn.text[tkn.num] = '\0';
+                    v2("Register name: \"%s\"", tkn.text);
                     struct reginfo* ri = dict_get(&reginfo, tkn.text);
                     if (ri == NULL)
                         fatal(E_COMMON, "%d: Invalid register \"%s\"", l,
@@ -616,7 +684,7 @@ struct line parse_line(struct buffer* b, int l)
                 } else {
                     continue;
                 }
-            } else if (opds[o] & S) {
+            } else if (opds[o] == S) {
                 if (tkn.type != T_TEXT)
                     continue;
                 line.opds[o].s = malloc(tkn.num + 1);
@@ -629,7 +697,7 @@ struct line parse_line(struct buffer* b, int l)
             break; // I'm so sorry.
         }
 
-        if (line.shape == NULL)
+        if (shape == NULL)
             fatal(E_COMMON, "%d: Operand %d is invalid", l, o + 1);
 
         if (tkn.type == T_EOL)
@@ -638,11 +706,17 @@ struct line parse_line(struct buffer* b, int l)
         tkn = next_token(b, l);
     }
 
-    if (line.shape->opds[o] != 0)
+    if (shape->opds[o] != 0)
         fatal(E_COMMON, "%d: Too few operands", l);
 
     if (tkn.type != T_EOL)
         fatal(E_COMMON, "%d: Trailing characters", l);
+
+    for (o = 0; o < OPDS_LEN; ++o) {
+        line.types[o] = shape->opds[o];
+        if (shape->opds[o] == 0)
+            break;
+    }
 
     return line;
 }
@@ -706,8 +780,9 @@ struct line* assemble_file(struct buffer* b)
                                 fatal(E_RARE, "Can't allocate line");
                             new->star = false;
                             new->cmd = cmdinfo_init + C_MOVLB;
-                            new->shape = shapes + SH_U7;
                             new->opds[0].i = line->opds[0].r.b;
+                            new->types[0] = SH_U7;
+                            new->types[1] = 0;
                             insert_line(line, new);
                         }
                     }
